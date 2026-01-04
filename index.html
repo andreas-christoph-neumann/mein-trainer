@@ -67,9 +67,12 @@
 </div>
 
 <script>
-    // 1. DB Setup [cite: 31, 42, 43]
+    // 1. DB Setup
     const db = new Dexie('VocabTrainerDB');
-    db.version(1).stores({ items: '++id, deckId, termSource, termTarget,.dueDate' });
+    // Korrektes Schema ohne Platzhalter-Tags
+    db.version(1).stores({ 
+        items: '++id, deckId, termSource, termTarget, srs.dueDate' 
+    }); [cite: 94, 96]
 
     let currentItem = null;
 
@@ -143,18 +146,35 @@
     }
 
     async function addVocab() {
-        const de = document.getElementById('input-de').value;
-        const sv = document.getElementById('input-sv').value;
-        if (!de || !sv) return;
+    const de = document.getElementById('input-de').value;
+    const sv = document.getElementById('input-sv').value;
+    
+    if (!de || !sv) return;
+
+    try {
         await db.items.add({
-            termSource: de, termTarget: sv,
-            srs: { reps: 0, interval: 0, easeFactor: 2.5, dueDate: Date.now() } // [cite: 41]
-        });
+            deckId: 1, // Standard-DeckID laut Konzept
+            termSource: de,
+            termTarget: sv,
+            srs: { 
+                reps: 0, 
+                interval: 0, 
+                easeFactor: 2.5, 
+                dueDate: Date.now() 
+            } 
+        }); [cite: 71, 77-84]
+
         document.getElementById('input-de').value = "";
         document.getElementById('input-sv').value = "";
+        
+        // UI zurücksetzen und Liste aktualisieren
         toggleView();
-        loadNextItem();
+        await loadNextItem(); 
+    } catch (error) {
+        console.error("Datenbankfehler:", error);
+        alert("Fehler beim Speichern!");
     }
+}
 
     function addChar(c) { document.getElementById('user-input').value += c; document.getElementById('user-input').focus(); }
 

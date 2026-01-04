@@ -31,10 +31,9 @@
 		}
 		.bar {
 			width: 5px;
-			background: #ccc; /* Grau für Stufe 1 */
+			background: #ccc;
 			border-radius: 1px;
 		}
-		/* Höhen der 5 Balken */
 		.bar1 { height: 6px; }
 		.bar2 { height: 9px; }
 		.bar3 { height: 12px; }
@@ -88,14 +87,9 @@
 
     let currentItem = null;
 
-    // 6-Stufen Leitner-System
 	function calculateSRS(item, quality) {
-		// Fallback: Wenn .stage fehlt, beginne bei 1
 		let stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
-    
-		const intervals = {
-			1: 1, 2: 2, 3: 7, 4: 14, 5: 30, 6: 180
-		};
+		const intervals = { 1: 1, 2: 2, 3: 7, 4: 14, 5: 30, 6: 180 };
 
 		if (quality >= 3) {
 			stage = Math.min(6, stage + 1);
@@ -139,8 +133,10 @@
         }
 
         currentItem = due.length > 0 ? due[0] : null;
-        // Innerhalb von loadNextItem
 		if (currentItem) {
+            // Wort anzeigen
+            document.getElementById('display-prompt').innerText = currentItem.termSource;
+            // Fortschrittsbalken und Richtung anzeigen
 			const currentStage = (currentItem.srs && currentItem.srs.stage) ? currentItem.srs.stage : 1;
 			document.getElementById('direction-label').innerHTML = 
 			getProgressIcon(currentStage) + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE");
@@ -175,8 +171,7 @@
 		const de = document.getElementById('input-de').value.trim();
 		if (!de || !sv) return;
 
-		// Start auf Stufe 1, dueDate 0 erzwingt sofortige Abfrage
-		const srsInit = () => ({ stage: 1, dueDate: 0 }); [cite: 84, 181]
+		const srsInit = () => ({ stage: 1, dueDate: 0 });
 
 		await db.items.add({ deckId: 1, termSource: de, termTarget: sv, direction: 'de-sv', srs: srsInit() });
 		await db.items.add({ deckId: 1, termSource: sv, termTarget: de, direction: 'sv-de', srs: srsInit() });
@@ -225,15 +220,12 @@
     }
 
 	function getProgressIcon(stage = 1) {
-		const colors = ['#ff4444', '#ffbb33', '#ffeb3b', '#90EE90', '#006400']; // Rot, Orange, Gelb, Hellgrün, Dunkelgrün
+		const colors = ['#ff4444', '#ffbb33', '#ffeb3b', '#90EE90', '#006400'];
 		let html = '<div class="progress-container">';
-    
 		for (let i = 1; i <= 5; i++) {
-			// Ein Balken wird gefärbt, wenn die Stufe hoch genug ist (Stufe 2 = 1 Balken, Stufe 6 = 5 Balken)
 			const color = (stage > i) ? colors[i-1] : '#ccc';
 			html += `<div class="bar bar${i}" style="background: ${color}"></div>`;
 		}
-    
 		html += '</div>';
 		return html;
 	}

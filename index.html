@@ -170,21 +170,22 @@
         setTimeout(loadNextItem, 2000);
     }
 
-    async function addVocab() {
-        const sv = document.getElementById('input-sv').value.trim();
-        const de = document.getElementById('input-de').value.trim();
-        if (!de || !sv) return;
+	async function addVocab() {
+		const sv = document.getElementById('input-sv').value.trim();
+		const de = document.getElementById('input-de').value.trim();
+		if (!de || !sv) return;
 
-        const srsInit = () => ({ stage: 1, dueDate: Date.now() });
+		// Start auf Stufe 1, dueDate 0 erzwingt sofortige Abfrage
+		const srsInit = () => ({ stage: 1, dueDate: 0 }); [cite: 84, 181]
 
-        await db.items.add({ deckId: 1, termSource: de, termTarget: sv, direction: 'de-sv', srs: srsInit() });
-        await db.items.add({ deckId: 1, termSource: sv, termTarget: de, direction: 'sv-de', srs: srsInit() });
+		await db.items.add({ deckId: 1, termSource: de, termTarget: sv, direction: 'de-sv', srs: srsInit() });
+		await db.items.add({ deckId: 1, termSource: sv, termTarget: de, direction: 'sv-de', srs: srsInit() });
 
-        document.getElementById('input-de').value = "";
-        document.getElementById('input-sv').value = "";
-        renderList();
-        loadNextItem();
-    }
+		document.getElementById('input-de').value = "";
+		document.getElementById('input-sv').value = "";
+		if (!document.getElementById('add-view').classList.contains('hidden')) renderList();
+		await loadNextItem(); 
+	}
 
     async function renderList() {
         const items = await db.items.toArray();

@@ -69,10 +69,10 @@
 
     let currentItem = null;
 
-    // Leiter-System
+    // 6-Stufen Leitner-System
     function calculateSRS(item, quality) {
         let { stage } = item.srs;
-        const intervals = {ab
+        const intervals = {
             1: 1,   // jeden Tag
             2: 2,   // jeden 2. Tag
             3: 7,   // jede Woche
@@ -82,10 +82,8 @@
         };
 
         if (quality >= 3) {
-            // Bei Erfolg: Stufe erhöhen (max. 6)
             stage = Math.min(6, stage + 1);
         } else {
-            // Bei Fehler: Sofort zurück auf Stufe 1
             stage = 1;
         }
 
@@ -125,10 +123,10 @@
         }
 
         currentItem = due.length > 0 ? due[0] : null;
-		if (currentItem) {
-			document.getElementById('display-prompt').innerText = currentItem.termSource;
-			document.getElementById('direction-label').innerText = 
-				`${currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE"} (Stufe ${currentItem.srs.stage})`;
+        if (currentItem) {
+            document.getElementById('display-prompt').innerText = currentItem.termSource;
+            document.getElementById('direction-label').innerText = 
+                `${currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE"} (Stufe ${currentItem.srs.stage})`;
         } else {
             document.getElementById('display-prompt').innerText = "Alles erledigt! 🎉";
             document.getElementById('direction-label').innerText = "";
@@ -145,7 +143,6 @@
         let quality = dist === 0 ? 5 : (dist === 1 ? 4 : (dist === 2 ? 3 : 0));
         await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, quality) });
         
-        // Sprachausgabe bei schwedischen Wörtern
         if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
         else speak(currentItem.termSource);
 
@@ -161,7 +158,6 @@
         const de = document.getElementById('input-de').value.trim();
         if (!de || !sv) return;
 
-        // Start auf Stufe 1, sofort fällig
         const srsInit = () => ({ stage: 1, dueDate: Date.now() });
 
         await db.items.add({ deckId: 1, termSource: de, termTarget: sv, direction: 'de-sv', srs: srsInit() });
@@ -176,11 +172,11 @@
     async function renderList() {
         const items = await db.items.toArray();
         document.getElementById('vocab-list').innerHTML = items.map(i => `
-		<div>
-			<span>[Stufe ${i.srs.stage}] <strong>${i.termSource}</strong> - ${i.termTarget}</span>
-			<button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px; border-radius:3px;">X</button>
-		</div>
-	`).join('');
+            <div>
+                <span>[Stufe ${i.srs.stage}] <strong>${i.termSource}</strong> - ${i.termTarget}</span>
+                <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px; border-radius:3px;">X</button>
+            </div>
+        `).join('');
     }
 
     async function deleteVocab(id) {
@@ -190,11 +186,14 @@
     function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
 
     function toggleView() {
-        const isAdd = document.getElementById('add-view').classList.toggle('hidden');
-        document.getElementById('learn-view').classList.toggle('hidden', !isAdd);
-        document.getElementById('input-controls').classList.toggle('hidden', !isAdd);
-        document.getElementById('viewBtn').innerText = isAdd ? "Zum Lernen" : "Vokabeln verwalten";
-        if (isAdd) renderList();
+        const addView = document.getElementById('add-view');
+        const isNowHidden = addView.classList.toggle('hidden');
+        
+        document.getElementById('learn-view').classList.toggle('hidden', !isNowHidden);
+        document.getElementById('input-controls').classList.toggle('hidden', !isNowHidden);
+        document.getElementById('viewBtn').innerText = isNowHidden ? "Vokabeln verwalten" : "Zum Lernen";
+        
+        if (!isNowHidden) renderList();
     }
 
     async function forceUpdate() {

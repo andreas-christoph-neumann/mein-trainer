@@ -148,23 +148,36 @@
         document.getElementById('feedback-area').innerText = "";
     }
 
-    async function checkAnswer() {
-        if (!currentItem) return;
-        const input = document.getElementById('user-input').value.trim();
-        const dist = getLevenshtein(input.toLowerCase(), currentItem.termTarget.toLowerCase());
-        
-        let quality = dist === 0 ? 5 : (dist === 1 ? 4 : (dist === 2 ? 3 : 0));
-        await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, quality) });
-        
-        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
-        else speak(currentItem.termSource);
+	async function checkAnswer() {
+		if (!currentItem) return;
+		const input = document.getElementById('user-input').value.trim();
+		const target = currentItem.termTarget.trim();
 
-        const feedback = document.getElementById('feedback-area');
-        feedback.innerText = quality >= 3 ? `Richtig! (${currentItem.termTarget})` : `Falsch: ${currentItem.termTarget}`;
-        feedback.style.color = quality >= 3 ? "green" : "red";
+		// "Null-Toleranz-Modus": Jeder Buchstabe (besonders å, ä, ö) muss exakt stimmen[cite: 124, 125, 126].
+		// Wir nutzen .toLowerCase(), damit die automatische Großschreibung am Handy
+		// nicht als Fehler gewertet wird, aber Umlaute und Schreibweise sind nun strikt.
+		const isCorrect = input.toLowerCase() === target.toLowerCase();
 
-        setTimeout(loadNextItem, 2000);
-    }
+		// Bei Erfolg Stufe 5 (Aufstieg), bei kleinstem Fehler Stufe 0 (Reset auf Stufe 1) [cite: 107-112].
+		let quality = isCorrect ? 5 : 0;
+    
+		await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, quality) });
+    
+		// Sprachausgabe und Feedback
+		if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
+		else speak(currentItem.termSource);
+
+		const feedback = document.getElementById('feedback-area');
+		feedback.innerText = isCorrect ? `Richtig! (${target})` : `Falsch. Lösung: ${target}`;
+		feedback.style.color = isCorrect ? "green" : "red";
+
+		// Sperrt den Button kurz, um versehentliches Überspringen zu verhindern
+		document.getElementById('check-btn').disabled = true;
+		setTimeout(() => {
+			document.getElementById('check-btn').disabled = false;
+			loadNextItem();
+		}, 2000);
+	}
 
 	async function addVocab() {
 		const sv = document.getElementById('input-sv').value.trim();

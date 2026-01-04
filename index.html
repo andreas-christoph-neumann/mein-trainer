@@ -48,6 +48,10 @@
         <input type="text" id="input-sv" placeholder="Schwedisch (z.B. Äpplet)" style="margin-top:10px">
         <button class="action-btn" onclick="addVocab()">Speichern</button>
     </div>
+    <div id="manage-view" class="hidden">
+        <h2>Vokabeln verwalten</h2>
+        <div id="vocab-list"></div>
+    </div>
 </div>
 
 <div class="controls" id="input-controls">
@@ -190,9 +194,11 @@
 
     function toggleView() {
         const isAdd = document.getElementById('add-view').classList.toggle('hidden');
+        document.getElementById('manage-view').classList.toggle('hidden', !isAdd); // Zeigt Liste im Add-Modus
         document.getElementById('learn-view').classList.toggle('hidden', !isAdd);
         document.getElementById('input-controls').classList.toggle('hidden', !isAdd);
-        document.getElementById('viewBtn').innerText = isAdd ? "Vokabeln hinzufügen" : "Zum Lernen";
+        document.getElementById('viewBtn').innerText = isAdd ? "Vokabeln verwalten" : "Zum Lernen";
+        if (isAdd) renderList();
     }
 
     async function forceUpdate() {
@@ -203,6 +209,40 @@
             await Promise.all(keys.map(k => caches.delete(k)));
             window.location.reload(true);
         }
+    }
+
+    // Liste anzeigen
+    async function renderList() {
+        const allItems = await db.items.toArray();
+        const listDiv = document.getElementById('vocab-list');
+        listDiv.innerHTML = allItems.map(item => `
+            <div style="background: white; margin-bottom: 5px; padding: 10px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center;">
+                <span><strong>${item.termSource}</strong> - ${item.termTarget}</span>
+                <div>
+                    <button onclick="editVocab(${item.id})" style="background: var(--accent); border: none; padding: 5px; border-radius: 3px;">Edit</button>
+                    <button onclick="deleteVocab(${item.id})" style="background: #ff4444; color: white; border: none; padding: 5px; border-radius: 3px; margin-left: 5px;">X</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Löschen
+    async function deleteVocab(id) {
+        if (confirm("Löschen?")) {
+            await db.items.delete(id);
+            renderList();
+            loadNextItem();
+        }
+    }
+
+    // Korrigieren (lädt Daten zurück ins Formular)
+    async function editVocab(id) {
+        const item = await db.items.get(id);
+        document.getElementById('input-de').value = item.termSource;
+        document.getElementById('input-sv').value = item.termTarget;
+        // Löscht das alte Item, damit das neue beim Speichern als "Update" fungiert
+        await db.items.delete(id); 
+        toggleView(); // Wechselt zum Formular
     }
 
     window.speechSynthesis.getVoices();

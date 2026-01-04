@@ -21,6 +21,25 @@
         .hidden { display: none; }
         .feedback { margin-top: 10px; font-weight: bold; text-align: center; }
         #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; display: flex; justify-content: space-between; align-items: center; background: white; margin-bottom: 5px; border-radius: 5px; }
+		.progress-container {
+			display: inline-flex;
+			align-items: flex-end;
+			gap: 3px;
+			height: 20px;
+			vertical-align: middle;
+			margin-right: 8px;
+		}
+		.bar {
+			width: 5px;
+			background: #ccc; /* Grau für Stufe 1 */
+			border-radius: 1px;
+		}
+		/* Höhen der 5 Balken */
+		.bar1 { height: 6px; }
+		.bar2 { height: 9px; }
+		.bar3 { height: 12px; }
+		.bar4 { height: 15px; }
+		.bar5 { height: 18px; }
     </style>
 </head>
 <body>
@@ -123,9 +142,8 @@
         // Innerhalb von loadNextItem
 		if (currentItem) {
 			const currentStage = (currentItem.srs && currentItem.srs.stage) ? currentItem.srs.stage : 1;
-			document.getElementById('display-prompt').innerText = currentItem.termSource;
-			document.getElementById('direction-label').innerText = 
-				`${currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE"} (Stufe ${currentStage})`;
+			document.getElementById('direction-label').innerHTML = 
+			getProgressIcon(currentStage) + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE");
         } else {
             document.getElementById('display-prompt').innerText = "Alles erledigt! 🎉";
             document.getElementById('direction-label').innerText = "";
@@ -172,7 +190,7 @@
         const items = await db.items.toArray();
         document.getElementById('vocab-list').innerHTML = items.map(i => `
             <div>
-				<span>[Stufe ${i.srs.stage || 1}] <strong>${i.termSource}</strong> - ${i.termTarget}</span>
+				<span>${getProgressIcon(i.srs.stage || 1)} <strong>${i.termSource}</strong> - ${i.termTarget}</span>
                 <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px; border-radius:3px;">X</button>
             </div>
         `).join('');
@@ -204,6 +222,20 @@
             window.location.reload(true);
         }
     }
+
+	function getProgressIcon(stage = 1) {
+		const colors = ['#ff4444', '#ffbb33', '#ffeb3b', '#90EE90', '#006400']; // Rot, Orange, Gelb, Hellgrün, Dunkelgrün
+		let html = '<div class="progress-container">';
+    
+		for (let i = 1; i <= 5; i++) {
+			// Ein Balken wird gefärbt, wenn die Stufe hoch genug ist (Stufe 2 = 1 Balken, Stufe 6 = 5 Balken)
+			const color = (stage > i) ? colors[i-1] : '#ccc';
+			html += `<div class="bar bar${i}" style="background: ${color}"></div>`;
+		}
+    
+		html += '</div>';
+		return html;
+	}
 
     loadNextItem();
 </script>

@@ -146,47 +146,53 @@
             document.getElementById('stats').innerText = "DB-Fehler!";
         }
     }
-
+    
     async function checkAnswer() {
         if (!currentItem) return;
         const input = document.getElementById('user-input').value.trim();
-        const dist = getLevenshtein(input.toLowerCase(), currentItem.termTarget.toLowerCase());
+        const dist = getLevenshtein(input.toLowerCase(), currentItem.termTarget.toLowerCase()); [cite: 121]
+    
+        let quality = dist === 0 ? 5 : (dist === 1 ? 4 : (dist === 2 ? 3 : 0)); [cite: 107-112, 123]
+        await db.items.update(currentItem.id, { srs: calculateSM2(currentItem, quality) }); [cite: 113-116]
         
-        let quality = dist === 0 ? 5 : (dist === 1 ? 4 : (dist === 2 ? 3 : 0));
-        const newSrs = calculateSM2(currentItem, quality);
-        
-        await db.items.update(currentItem.id, { srs: newSrs });
-        speak(currentItem.termTarget);
-        
+        // Sprachausgabe nur, wenn das Ziel Schwedisch ist oder die Quelle (Prompt) Schwedisch war
+        if (currentItem.direction === 'de-sv') {
+            speak(currentItem.termTarget); 
+        } else {
+            speak(currentItem.termSource);
+        }
+    
         const feedback = document.getElementById('feedback-area');
         feedback.innerText = quality >= 3 ? `Richtig! (${currentItem.termTarget})` : `Falsch: ${currentItem.termTarget}`;
         feedback.style.color = quality >= 3 ? "green" : "red";
-
+    
         setTimeout(loadNextItem, 2000);
     }
 
-   async function addVocab() {
-        // Reihenfolge der Zuweisung getauscht
-        const sv = document.getElementById('input-sv').value;
-        const de = document.getElementById('input-de').value;
-    
-        if (!de || !sv) return;
+    async function addVocab() {
+       const sv = document.getElementById('input-sv').value;
+       const de = document.getElementById('input-de').value;
+       if (!de || !sv) return;
 
-        try {
-            await db.items.add({
-                deckId: 1,
-                termSource: de, // Deutsch bleibt Quellsprache für die Abfrage
-                termTarget: sv, // Schwedisch bleibt das Ziel [cite: 17, 73]
-                srs: { reps: 0, interval: 0, easeFactor: 2.5, dueDate: Date.now() }
-            });
+       const srsInit = () => ({ reps: 0, interval: 0, easeFactor: 2.5, dueDate: Date.now() }); [cite: 77-84]
 
-            document.getElementById('input-de').value = "";
-            document.getElementById('input-sv').value = "";
-            toggleView();
-            await loadNextItem(); 
-        } catch (error) {
-            alert("Speicherfehler!");
-        }
+       try {
+           // Richtung 1: Deutsch -> Schwedisch (Produktion)
+           await db.items.add({
+               deckId: 1, termSource: de, termTarget: sv, direction: 'de-sv', srs: srsInit()
+           });
+           // Richtung 2: Schwedisch -> Deutsch (Verständnis)
+           await db.items.add({
+               deckId: 1, termSource: sv, termTarget: de, direction: 'sv-de', srs: srsInit()
+           });
+
+           document.getElementById('input-de').value = "";
+           document.getElementById('input-sv').value = "";
+           toggleView();
+           await loadNextItem(); 
+       } catch (error) {
+           alert("Speicherfehler!");
+       }
     }
 
     function addChar(c) { 
@@ -252,4 +258,5 @@
     loadNextItem();
 </script>
 </body>
+
 </html>

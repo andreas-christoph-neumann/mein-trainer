@@ -1,4 +1,4 @@
-const VERSION = 'v1.1'; [cite_start]// Diese Nummer bei jedem Update ändern! [cite: 169]
+const VERSION = 'v1.2'; [cite_start]// Diese Nummer bei jedem Update ändern! [cite: 169]
 const CACHE_NAME = `vocab-${VERSION}`;
 const ASSETS = ['./', './index.html', './manifest.json'];
 

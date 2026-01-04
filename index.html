@@ -5,45 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Svenska Trainer</title>
     <link rel="manifest" href="manifest.json">
-    <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').then(reg => {
-          reg.onupdatefound = () => {
-            const worker = reg.installing;
-            worker.onstatechange = () => {
-              if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-                // Informiert den Nutzer über das Update
-                if (confirm('Neue Version verfügbar! App jetzt aktualisieren?')) {
-                  window.location.reload();
-                }
-              }
-            };
-          };
-        });
-      }
-    </script>
-    <button onclick="forceUpdate()" style="background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 0.8rem;">
-    Cache löschen & Update
-    </button>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
         :root { --primary: #0051a8; --accent: #ffcd00; --bg: #f4f4f4; }
         body { font-family: sans-serif; margin: 0; background: var(--bg); display: flex; flex-direction: column; height: 100dvh; }
         header { background: var(--primary); color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center; }
-        
-        /* Main UI [cite: 73, 74] */
         #app { flex: 1; display: flex; flex-direction: column; padding: 1rem; overflow-y: auto; }
         .card { background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 1rem; }
         .word-de { font-size: 1.5rem; color: #666; }
-        .word-target { font-size: 2.2rem; font-weight: bold; margin: 10px 0; }
-        
-        /* Thumb-Zone & Input [cite: 72, 74, 79] */
         .controls { padding: 1rem; background: white; border-top: 1px solid #ddd; }
         .helper-bar { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px; }
         .helper-btn { padding: 10px 15px; font-size: 1.2rem; border: 1px solid #ccc; border-radius: 5px; background: #eee; }
         input { width: 100%; padding: 15px; font-size: 1.1rem; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; }
         .action-btn { width: 100%; padding: 15px; margin-top: 10px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; }
-        
         .hidden { display: none; }
         .feedback { margin-top: 10px; font-weight: bold; text-align: center; }
     </style>
@@ -51,7 +25,12 @@
 <body>
 
 <header>
-    <span id="stats">Lädt...</span>
+    <div>
+        <span id="stats">Lädt...</span>
+        <button onclick="forceUpdate()" style="background: #ff4444; color: white; border: none; padding: 5px 8px; border-radius: 5px; font-size: 0.7rem; margin-left: 10px;">
+            Reset
+        </button>
+    </div>
     <button onclick="toggleView()" id="viewBtn">Vokabeln hinzufügen</button>
 </header>
 
@@ -82,16 +61,31 @@
 </div>
 
 <script>
-    // 1. DB Setup
+    // 1. Service Worker Registrierung
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').then(reg => {
+            reg.onupdatefound = () => {
+                const worker = reg.installing;
+                worker.onstatechange = () => {
+                    if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                        if (confirm('Neue Version verfügbar! App jetzt aktualisieren?')) {
+                            window.location.reload();
+                        }
+                    }
+                };
+            };
+        });
+    }
+
+    // 2. Datenbank Setup
     const db = new Dexie('VocabTrainerDB');
-    // Korrektes Schema ohne Platzhalter-Tags
     db.version(1).stores({ 
         items: '++id, deckId, termSource, termTarget, srs.dueDate' 
-    }); [cite: 94, 96]
+    });
 
     let currentItem = null;
 
-    // 2. Levenshtein-Logik für Tippfehler [cite: 53, 54]
+    // 3. Logik-Funktionen
     function getLevenshtein(a, b) {
         const matrix = [];
         for (let i = 0; i <= b.length; i++) matrix[i] = [i];
@@ -105,7 +99,6 @@
         return matrix[b.length][a.length];
     }
 
-    // 3. SM-2 Algorithmus [cite: 48, 50, 90]
     function calculateSM2(item, quality) {
         let { reps, interval, easeFactor } = item.srs;
         if (quality >= 3) {
@@ -120,7 +113,6 @@
         return { reps, interval, easeFactor, dueDate: Date.now() + interval * 24 * 60 * 60 * 1000 };
     }
 
-    // 4. Sprachausgabe [cite: 63, 64, 66]
     function speak(text) {
         const ut = new SpeechSynthesisUtterance(text);
         ut.lang = 'sv-SE';
@@ -128,28 +120,26 @@
         window.speechSynthesis.speak(ut);
     }
 
-    // UI Logik
+    // 4. UI-Aktionen
     async function loadNextItem() {
         try {
-            const due = await db.items.where('srs.dueDate').below(Date.now()).toArray(); [cite: 98]
+            const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
             const allCount = await db.items.count();
-        
             document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
         
             if (allCount === 0) {
-                document.getElementById('display-de').innerText = "Keine Vokabeln vorhanden. Bitte füge welche hinzu!";
-                // Falls noch gar nichts da ist, zeige direkt das Add-Menü
+                document.getElementById('display-de').innerText = "Bitte füge Vokabeln hinzu!";
                 if (document.getElementById('add-view').classList.contains('hidden')) toggleView();
                 return;
             }
 
             currentItem = due.length > 0 ? due[0] : null;
-            document.getElementById('display-de').innerText = currentItem ? currentItem.termSource : "Alles für heute erledigt! 🎉";
+            document.getElementById('display-de').innerText = currentItem ? currentItem.termSource : "Alles erledigt! 🎉";
             document.getElementById('user-input').value = "";
             document.getElementById('feedback-area').innerText = "";
         } catch (e) {
-            console.error("Ladefehler:", e);
-            document.getElementById('stats').innerText = "Datenbank-Fehler!";
+            console.error(e);
+            document.getElementById('stats').innerText = "DB-Fehler!";
         }
     }
 
@@ -158,55 +148,45 @@
         const input = document.getElementById('user-input').value.trim();
         const dist = getLevenshtein(input.toLowerCase(), currentItem.termTarget.toLowerCase());
         
-        let quality = 0;
-        if (dist === 0) quality = 5;
-        else if (dist === 1) quality = 4;
-        else if (dist === 2) quality = 3;
-
+        let quality = dist === 0 ? 5 : (dist === 1 ? 4 : (dist === 2 ? 3 : 0));
         const newSrs = calculateSM2(currentItem, quality);
-        await db.items.update(currentItem.id, { srs: newSrs });
         
-        speak(currentItem.termTarget); // Audio-Ausgabe [cite: 54, 89]
+        await db.items.update(currentItem.id, { srs: newSrs });
+        speak(currentItem.termTarget);
         
         const feedback = document.getElementById('feedback-area');
-        feedback.innerText = quality >= 3 ? `Richtig! (${currentItem.termTarget})` : `Falsch. Lösung: ${currentItem.termTarget}`;
+        feedback.innerText = quality >= 3 ? `Richtig! (${currentItem.termTarget})` : `Falsch: ${currentItem.termTarget}`;
         feedback.style.color = quality >= 3 ? "green" : "red";
 
         setTimeout(loadNextItem, 2000);
     }
 
     async function addVocab() {
-    const de = document.getElementById('input-de').value;
-    const sv = document.getElementById('input-sv').value;
-    
-    if (!de || !sv) return;
+        const de = document.getElementById('input-de').value;
+        const sv = document.getElementById('input-sv').value;
+        if (!de || !sv) return;
 
-    try {
-        await db.items.add({
-            deckId: 1, // Standard-DeckID laut Konzept
-            termSource: de,
-            termTarget: sv,
-            srs: { 
-                reps: 0, 
-                interval: 0, 
-                easeFactor: 2.5, 
-                dueDate: Date.now() 
-            } 
-        }); [cite: 71, 77-84]
-
-        document.getElementById('input-de').value = "";
-        document.getElementById('input-sv').value = "";
-        
-        // UI zurücksetzen und Liste aktualisieren
-        toggleView();
-        await loadNextItem(); 
-    } catch (error) {
-        console.error("Datenbankfehler:", error);
-        alert("Fehler beim Speichern!");
+        try {
+            await db.items.add({
+                deckId: 1,
+                termSource: de,
+                termTarget: sv,
+                srs: { reps: 0, interval: 0, easeFactor: 2.5, dueDate: Date.now() }
+            });
+            document.getElementById('input-de').value = "";
+            document.getElementById('input-sv').value = "";
+            toggleView();
+            await loadNextItem(); 
+        } catch (error) {
+            alert("Speicherfehler!");
+        }
     }
-}
 
-    function addChar(c) { document.getElementById('user-input').value += c; document.getElementById('user-input').focus(); }
+    function addChar(c) { 
+        const input = document.getElementById('user-input');
+        input.value += c; 
+        input.focus(); 
+    }
 
     function toggleView() {
         const isAdd = document.getElementById('add-view').classList.toggle('hidden');
@@ -215,26 +195,18 @@
         document.getElementById('viewBtn').innerText = isAdd ? "Vokabeln hinzufügen" : "Zum Lernen";
     }
 
-    // Initialisierung
-    window.speechSynthesis.getVoices(); // Stimmen vorladen [cite: 63]
-    loadNextItem();
-
     async function forceUpdate() {
-        if (confirm("App-Cache löschen und neu laden? Deine Vokabeln in der Datenbank bleiben erhalten.")) {
-            // 1. Service Worker entkoppeln
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            for (let registration of registrations) {
-                await registration.unregister();
-            }
-            // 2. Cache-Speicher leeren
-            const cacheNames = await caches.keys();
-            await Promise.all(cacheNames.map(name => caches.delete(name)));
-        
-            // 3. Seite hart neu laden
+        if (confirm("Cache löschen und neu laden?")) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            for (let r of regs) await r.unregister();
+            const keys = await caches.keys();
+            await Promise.all(keys.map(k => caches.delete(k)));
             window.location.reload(true);
         }
     }
 
+    window.speechSynthesis.getVoices();
+    loadNextItem();
 </script>
 </body>
 </html>

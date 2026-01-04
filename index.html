@@ -11,34 +11,21 @@
         body { font-family: sans-serif; margin: 0; background: var(--bg); display: flex; flex-direction: column; height: 100dvh; }
         header { background: var(--primary); color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center; }
         #app { flex: 1; display: flex; flex-direction: column; padding: 1rem; overflow-y: auto; }
-        .card { background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 1rem; }
-        .word-de { font-size: 1.5rem; color: #666; }
+        .card { background: white; padding: 1.5rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 1rem; }
+        .word-de { font-size: 1.8rem; font-weight: bold; color: #333; margin-bottom: 5px; }
+        .sentence-hint { font-size: 1rem; color: #666; font-style: italic; min-height: 1.2rem; }
         .controls { padding: 1rem; background: white; border-top: 1px solid #ddd; }
         .helper-bar { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px; }
         .helper-btn { padding: 10px 15px; font-size: 1.2rem; border: 1px solid #ccc; border-radius: 5px; background: #eee; }
-        input { width: 100%; padding: 15px; font-size: 1.1rem; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        input { width: 100%; padding: 12px; font-size: 1rem; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; }
         .action-btn { width: 100%; padding: 15px; margin-top: 10px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; }
         .hidden { display: none; }
         .feedback { margin-top: 10px; font-weight: bold; text-align: center; }
-        #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; display: flex; justify-content: space-between; align-items: center; background: white; margin-bottom: 5px; border-radius: 5px; }
-		.progress-container {
-			display: inline-flex;
-			align-items: flex-end;
-			gap: 3px;
-			height: 20px;
-			vertical-align: middle;
-			margin-right: 8px;
-		}
-		.bar {
-			width: 5px;
-			background: #ccc;
-			border-radius: 1px;
-		}
-		.bar1 { height: 6px; }
-		.bar2 { height: 9px; }
-		.bar3 { height: 12px; }
-		.bar4 { height: 15px; }
-		.bar5 { height: 18px; }
+        #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
+        .vocab-entry-info { display: flex; flex-direction: column; gap: 2px; font-size: 0.9rem; }
+        .progress-container { display: inline-flex; align-items: flex-end; gap: 3px; height: 18px; vertical-align: middle; margin-right: 8px; }
+        .bar { width: 4px; background: #ccc; border-radius: 1px; }
+        .bar1 { height: 6px; } .bar2 { height: 9px; } .bar3 { height: 12px; } .bar4 { height: 15px; } .bar5 { height: 18px; }
     </style>
 </head>
 <body>
@@ -54,19 +41,24 @@
 <div id="app">
     <div id="learn-view">
         <div class="card">
-            <div id="direction-label" style="font-size: 0.8rem; color: var(--primary); margin-bottom: 5px;"></div>
-            <div class="word-de" id="display-prompt">Bitte füge Vokabeln hinzu!</div>
+            <div id="direction-label" style="font-size: 0.8rem; color: var(--primary); margin-bottom: 8px;"></div>
+            <div class="word-de" id="display-prompt">Bitte Vokabeln hinzufügen!</div>
+            <div class="sentence-hint" id="display-sentence"></div>
             <div id="feedback-area" class="feedback"></div>
         </div>
     </div>
 
     <div id="add-view" class="hidden">
         <h3>Neue Vokabel hinzufügen</h3>
-        <input type="text" id="input-sv" placeholder="Schwedisch (z.B. Äpplet)" autocapitalize="sentences">
-        <input type="text" id="input-de" placeholder="Deutsch (z.B. Der Apfel)" style="margin-top:10px" autocapitalize="sentences">
-        <button class="action-btn" onclick="addVocab()">Speichern (Beide Richtungen)</button>
+        <input type="text" id="input-sv" placeholder="Schwedisches Wort (z.B. Äpplet)" autocapitalize="sentences">
+        <input type="text" id="input-sent-sv" placeholder="Schwedischer Beispielsatz (optional)" style="margin-top:5px; font-size: 0.9rem;" autocapitalize="sentences">
         
-        <h3 style="margin-top:20px">Alle Vokabeln</h3>
+        <input type="text" id="input-de" placeholder="Deutsche Bedeutung (z.B. Der Apfel)" style="margin-top:15px" autocapitalize="sentences">
+        <input type="text" id="input-sent-de" placeholder="Deutscher Beispielsatz (optional)" style="margin-top:5px; font-size: 0.9rem;" autocapitalize="sentences">
+        
+        <button class="action-btn" onclick="addVocab()">Speichern</button>
+        
+        <h3 style="margin-top:25px">Alle Vokabeln</h3>
         <div id="vocab-list"></div>
     </div>
 </div>
@@ -83,36 +75,17 @@
 
 <script>
     const db = new Dexie('VocabTrainerDB');
+    // Schema erweitert um Beispielsatz-Felder
     db.version(1).stores({ items: '++id, deckId, termSource, termTarget, direction, srs.dueDate' });
 
     let currentItem = null;
 
-	function calculateSRS(item, quality) {
-		let stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
-		const intervals = { 1: 1, 2: 2, 3: 7, 4: 14, 5: 30, 6: 180 };
-
-		if (quality >= 3) {
-			stage = Math.min(6, stage + 1);
-		} else {
-			stage = 1;
-		}
-
-		const days = intervals[stage];
-		const dueDate = Date.now() + days * 24 * 60 * 60 * 1000;
-		return { stage, dueDate };
-	}
-
-    function getLevenshtein(a, b) {
-        const matrix = [];
-        for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-        for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-        for (let i = 1; i <= b.length; i++) {
-            for (let j = 1; j <= a.length; j++) {
-                if (b.charAt(i - 1) === a.charAt(j - 1)) matrix[i][j] = matrix[i - 1][j - 1];
-                else matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
-            }
-        }
-        return matrix[b.length][a.length];
+    function calculateSRS(item, quality) {
+        let stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
+        const intervals = { 1: 1, 2: 2, 3: 7, 4: 14, 5: 30, 6: 180 };
+        if (quality >= 3) { stage = Math.min(6, stage + 1); } else { stage = 1; }
+        const dueDate = Date.now() + intervals[stage] * 24 * 60 * 60 * 1000;
+        return { stage, dueDate };
     }
 
     function speak(text) {
@@ -129,78 +102,89 @@
 
         if (allCount === 0) {
             document.getElementById('display-prompt').innerText = "Bitte Vokabeln hinzufügen!";
+            document.getElementById('display-sentence').innerText = "";
             return;
         }
 
         currentItem = due.length > 0 ? due[0] : null;
-		if (currentItem) {
-            // Wort anzeigen
+        if (currentItem) {
             document.getElementById('display-prompt').innerText = currentItem.termSource;
-            // Fortschrittsbalken und Richtung anzeigen
-			const currentStage = (currentItem.srs && currentItem.srs.stage) ? currentItem.srs.stage : 1;
-			document.getElementById('direction-label').innerHTML = 
-			getProgressIcon(currentStage) + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE");
+            // Zeige Beispielsatz als Kontext-Hinweis an [cite: 68]
+            document.getElementById('display-sentence').innerText = currentItem.sentenceSource || "";
+            
+            const currentStage = (currentItem.srs && currentItem.srs.stage) ? currentItem.srs.stage : 1;
+            document.getElementById('direction-label').innerHTML = 
+                getProgressIcon(currentStage) + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE");
         } else {
             document.getElementById('display-prompt').innerText = "Alles erledigt! 🎉";
+            document.getElementById('display-sentence').innerText = "";
             document.getElementById('direction-label').innerText = "";
         }
         document.getElementById('user-input').value = "";
         document.getElementById('feedback-area').innerText = "";
     }
 
-	async function checkAnswer() {
-		if (!currentItem) return;
-		const input = document.getElementById('user-input').value.trim();
-		const target = currentItem.termTarget.trim();
+    async function checkAnswer() {
+        if (!currentItem) return;
+        const input = document.getElementById('user-input').value.trim();
+        const target = currentItem.termTarget.trim();
+        const isCorrect = input.toLowerCase() === target.toLowerCase();
 
-		// "Null-Toleranz-Modus": Jeder Buchstabe (besonders å, ä, ö) muss exakt stimmen[cite: 124, 125, 126].
-		// Wir nutzen .toLowerCase(), damit die automatische Großschreibung am Handy
-		// nicht als Fehler gewertet wird, aber Umlaute und Schreibweise sind nun strikt.
-		const isCorrect = input.toLowerCase() === target.toLowerCase();
+        await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect ? 5 : 0) });
+        
+        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
+        else speak(currentItem.termSource);
 
-		// Bei Erfolg Stufe 5 (Aufstieg), bei kleinstem Fehler Stufe 0 (Reset auf Stufe 1) [cite: 107-112].
-		let quality = isCorrect ? 5 : 0;
-    
-		await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, quality) });
-    
-		// Sprachausgabe und Feedback
-		if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
-		else speak(currentItem.termSource);
+        const feedback = document.getElementById('feedback-area');
+        feedback.innerText = isCorrect ? `Richtig! (${target})` : `Falsch. Lösung: ${target}`;
+        feedback.style.color = isCorrect ? "green" : "red";
 
-		const feedback = document.getElementById('feedback-area');
-		feedback.innerText = isCorrect ? `Richtig! (${target})` : `Falsch. Lösung: ${target}`;
-		feedback.style.color = isCorrect ? "green" : "red";
+        document.getElementById('check-btn').disabled = true;
+        setTimeout(() => {
+            document.getElementById('check-btn').disabled = false;
+            loadNextItem();
+        }, 2000);
+    }
 
-		// Sperrt den Button kurz, um versehentliches Überspringen zu verhindern
-		document.getElementById('check-btn').disabled = true;
-		setTimeout(() => {
-			document.getElementById('check-btn').disabled = false;
-			loadNextItem();
-		}, 2000);
-	}
+    async function addVocab() {
+        const sv = document.getElementById('input-sv').value.trim();
+        const de = document.getElementById('input-de').value.trim();
+        const sentSv = document.getElementById('input-sent-sv').value.trim();
+        const sentDe = document.getElementById('input-sent-de').value.trim();
+        
+        if (!de || !sv) return;
 
-	async function addVocab() {
-		const sv = document.getElementById('input-sv').value.trim();
-		const de = document.getElementById('input-de').value.trim();
-		if (!de || !sv) return;
+        const srsInit = () => ({ stage: 1, dueDate: 0 });
 
-		const srsInit = () => ({ stage: 1, dueDate: 0 });
+        // Speicherung von Wort und Satz für beide Richtungen [cite: 67, 75, 76]
+        await db.items.add({ 
+            deckId: 1, termSource: de, termTarget: sv, 
+            sentenceSource: sentDe, sentenceTarget: sentSv,
+            direction: 'de-sv', srs: srsInit() 
+        });
+        await db.items.add({ 
+            deckId: 1, termSource: sv, termTarget: de, 
+            sentenceSource: sentSv, sentenceTarget: sentDe,
+            direction: 'sv-de', srs: srsInit() 
+        });
 
-		await db.items.add({ deckId: 1, termSource: de, termTarget: sv, direction: 'de-sv', srs: srsInit() });
-		await db.items.add({ deckId: 1, termSource: sv, termTarget: de, direction: 'sv-de', srs: srsInit() });
-
-		document.getElementById('input-de').value = "";
-		document.getElementById('input-sv').value = "";
-		if (!document.getElementById('add-view').classList.contains('hidden')) renderList();
-		await loadNextItem(); 
-	}
+        document.getElementById('input-sv').value = "";
+        document.getElementById('input-de').value = "";
+        document.getElementById('input-sent-sv').value = "";
+        document.getElementById('input-sent-de').value = "";
+        renderList();
+        loadNextItem();
+    }
 
     async function renderList() {
         const items = await db.items.toArray();
         document.getElementById('vocab-list').innerHTML = items.map(i => `
-            <div>
-				<span>${getProgressIcon(i.srs.stage || 1)} <strong>${i.termSource}</strong> - ${i.termTarget}</span>
-                <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px; border-radius:3px;">X</button>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div class="vocab-entry-info">
+                    <span>${getProgressIcon(i.srs.stage || 1)} <strong>${i.termSource}</strong> - ${i.termTarget}</span>
+                    <small style="color: #888;">${i.sentenceSource || ''}</small>
+                </div>
+                <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px 10px; border-radius:3px;">X</button>
             </div>
         `).join('');
     }
@@ -212,18 +196,25 @@
     function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
 
     function toggleView() {
-        const addView = document.getElementById('add-view');
-        const isNowHidden = addView.classList.toggle('hidden');
-        
+        const isNowHidden = document.getElementById('add-view').classList.toggle('hidden');
         document.getElementById('learn-view').classList.toggle('hidden', !isNowHidden);
         document.getElementById('input-controls').classList.toggle('hidden', !isNowHidden);
         document.getElementById('viewBtn').innerText = isNowHidden ? "Vokabeln verwalten" : "Zum Lernen";
-        
         if (!isNowHidden) renderList();
     }
 
+    function getProgressIcon(stage = 1) {
+        const colors = ['#ff4444', '#ffbb33', '#ffeb3b', '#90EE90', '#006400'];
+        let html = '<div class="progress-container">';
+        for (let i = 1; i <= 5; i++) {
+            const color = (stage > i) ? colors[i-1] : '#ccc';
+            html += `<div class="bar bar${i}" style="background: ${color}"></div>`;
+        }
+        return html + '</div>';
+    }
+
     async function forceUpdate() {
-        if (confirm("Reset? Datenbank bleibt erhalten, Cache wird geleert.")) {
+        if (confirm("Reset? Cache wird geleert.")) {
             const regs = await navigator.serviceWorker.getRegistrations();
             for (let r of regs) await r.unregister();
             const keys = await caches.keys();
@@ -232,19 +223,7 @@
         }
     }
 
-	function getProgressIcon(stage = 1) {
-		const colors = ['#ff4444', '#ffbb33', '#ffeb3b', '#90EE90', '#006400'];
-		let html = '<div class="progress-container">';
-		for (let i = 1; i <= 5; i++) {
-			const color = (stage > i) ? colors[i-1] : '#ccc';
-			html += `<div class="bar bar${i}" style="background: ${color}"></div>`;
-		}
-		html += '</div>';
-		return html;
-	}
-
     loadNextItem();
 </script>
-
 </body>
 </html>

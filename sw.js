@@ -1,10 +1,30 @@
-const CACHE_NAME = 'vocab-v1';
+const VERSION = 'v1.1'; [cite_start]// Diese Nummer bei jedem Update ändern! [cite: 169]
+const CACHE_NAME = `vocab-${VERSION}`;
 const ASSETS = ['./', './index.html', './manifest.json'];
 
+// Installation: Cache befüllen
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));
+  e.waitUntil(
+    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
+  );
+  self.skipWaiting(); // Erzwingt die sofortige Aktivierung
 });
 
+// Aktivierung: Alten Cache löschen
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys().then(keys => {
+      return Promise.all(
+        keys.filter(key => key !== CACHE_NAME)
+            .map(key => caches.delete(key))
+      );
+    })
+  );
+});
+
+// Fetch: Daten laden
 self.addEventListener('fetch', (e) => {
-  e.respondWith(caches.match(e.request).then(res => res || fetch(e.request)));
+  e.respondWith(
+    caches.match(e.request).then(res => res || fetch(e.request))
+  );
 });

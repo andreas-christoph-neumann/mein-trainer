@@ -7,7 +7,19 @@
     <link rel="manifest" href="manifest.json">
     <script>
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js');
+        navigator.serviceWorker.register('sw.js').then(reg => {
+          reg.onupdatefound = () => {
+            const worker = reg.installing;
+            worker.onstatechange = () => {
+              if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                // Informiert den Nutzer über das Update
+                if (confirm('Neue Version verfügbar! App jetzt aktualisieren?')) {
+                  window.location.reload();
+                }
+              }
+            };
+          };
+        });
       }
     </script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>

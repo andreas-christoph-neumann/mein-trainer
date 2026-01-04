@@ -22,6 +22,9 @@
         });
       }
     </script>
+    <button onclick="forceUpdate()" style="background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 0.8rem;">
+    Cache löschen & Update
+    </button>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
         :root { --primary: #0051a8; --accent: #ffcd00; --bg: #f4f4f4; }
@@ -127,12 +130,27 @@
 
     // UI Logik
     async function loadNextItem() {
-        const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
-        document.getElementById('stats').innerText = `Fällig: ${due.length}`;
-        currentItem = due.length > 0 ? due[0] : null;
-        document.getElementById('display-de').innerText = currentItem ? currentItem.termSource : "Alles gelernt!";
-        document.getElementById('user-input').value = "";
-        document.getElementById('feedback-area').innerText = "";
+        try {
+            const due = await db.items.where('srs.dueDate').below(Date.now()).toArray(); [cite: 98]
+            const allCount = await db.items.count();
+        
+            document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
+        
+            if (allCount === 0) {
+                document.getElementById('display-de').innerText = "Keine Vokabeln vorhanden. Bitte füge welche hinzu!";
+                // Falls noch gar nichts da ist, zeige direkt das Add-Menü
+                if (document.getElementById('add-view').classList.contains('hidden')) toggleView();
+                return;
+            }
+
+            currentItem = due.length > 0 ? due[0] : null;
+            document.getElementById('display-de').innerText = currentItem ? currentItem.termSource : "Alles für heute erledigt! 🎉";
+            document.getElementById('user-input').value = "";
+            document.getElementById('feedback-area').innerText = "";
+        } catch (e) {
+            console.error("Ladefehler:", e);
+            document.getElementById('stats').innerText = "Datenbank-Fehler!";
+        }
     }
 
     async function checkAnswer() {
@@ -200,6 +218,23 @@
     // Initialisierung
     window.speechSynthesis.getVoices(); // Stimmen vorladen [cite: 63]
     loadNextItem();
+
+    async function forceUpdate() {
+        if (confirm("App-Cache löschen und neu laden? Deine Vokabeln in der Datenbank bleiben erhalten.")) {
+            // 1. Service Worker entkoppeln
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (let registration of registrations) {
+                await registration.unregister();
+            }
+            // 2. Cache-Speicher leeren
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map(name => caches.delete(name)));
+        
+            // 3. Seite hart neu laden
+            window.location.reload(true);
+        }
+    }
+
 </script>
 </body>
 </html>

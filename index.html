@@ -20,6 +20,7 @@
         .action-btn { width: 100%; padding: 15px; margin-top: 10px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; }
         .hidden { display: none; }
         .feedback { margin-top: 10px; font-weight: bold; text-align: center; }
+        #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; display: flex; justify-content: space-between; align-items: center; background: white; margin-bottom: 5px; border-radius: 5px; }
     </style>
 </head>
 <body>
@@ -27,32 +28,30 @@
 <header>
     <div>
         <span id="stats">Lädt...</span>
-        <button onclick="forceUpdate()" style="background: #ff4444; color: white; border: none; padding: 5px 8px; border-radius: 5px; font-size: 0.7rem; margin-left: 10px;">
-            Reset
-        </button>
+        <button onclick="forceUpdate()" style="background: #ff4444; color: white; border: none; padding: 5px 8px; border-radius: 5px; font-size: 0.7rem; margin-left: 10px;">Reset</button>
     </div>
-    <button onclick="toggleView()" id="viewBtn">Vokabeln hinzufügen</button>
+    <button onclick="toggleView()" id="viewBtn">Vokabeln verwalten</button>
 </header>
 
 <div id="app">
     <div id="learn-view">
         <div class="card">
-            <div class="word-de" id="display-de">Keine fälligen Vokabeln!</div>
+            <div id="direction-label" style="font-size: 0.8rem; color: var(--primary); margin-bottom: 5px;"></div>
+            <div class="word-de" id="display-prompt">Bitte füge Vokabeln hinzu!</div>
             <div id="feedback-area" class="feedback"></div>
         </div>
     </div>
 
     <div id="add-view" class="hidden">
-        <h2>Neue Vokabel</h2>
-        <input type="text" id="input-sv" placeholder="Schwedisch (z.B. Äpplet)" autocapitalize="sentences" spellcheck="false">
-        <input type="text" id="input-de" placeholder="Deutsch (z.B. Der Apfel)" style="margin-top:10px" autocapitalize="sentences" spellcheck="false">
-        <button class="action-btn" onclick="addVocab()">Speichern</button>
+        <h3>Neue Vokabel hinzufügen</h3>
+        <input type="text" id="input-sv" placeholder="Schwedisch (z.B. Äpplet)" autocapitalize="sentences">
+        <input type="text" id="input-de" placeholder="Deutsch (z.B. Der Apfel)" style="margin-top:10px" autocapitalize="sentences">
+        <button class="action-btn" onclick="addVocab()">Speichern (Beide Richtungen)</button>
+        
+        <h3 style="margin-top:20px">Alle Vokabeln</h3>
+        <div id="vocab-list"></div>
     </div>
-        <div id="manage-view" class="hidden">
-            <h2>Vokabeln verwalten</h2>
-            <div id="vocab-list"></div>
-        </div>
-    </div>
+</div>
 
 <div class="controls" id="input-controls">
     <div class="helper-bar">
@@ -60,49 +59,17 @@
         <button class="helper-btn" onclick="addChar('ä')">ä</button>
         <button class="helper-btn" onclick="addChar('ö')">ö</button>
     </div>
-    <input type="text" id="user-input" placeholder="Übersetzung tippen..." autocomplete="off" autocapitalize="sentences" spellcheck="false">
+    <input type="text" id="user-input" placeholder="Antwort tippen..." autocomplete="off" autocapitalize="sentences">
     <button class="action-btn" id="check-btn" onclick="checkAnswer()">Prüfen</button>
 </div>
 
 <script>
-    // 1. Service Worker Registrierung
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').then(reg => {
-            reg.onupdatefound = () => {
-                const worker = reg.installing;
-                worker.onstatechange = () => {
-                    if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-                        if (confirm('Neue Version verfügbar! App jetzt aktualisieren?')) {
-                            window.location.reload();
-                        }
-                    }
-                };
-            };
-        });
-    }
-
-    // 2. Datenbank Setup
     const db = new Dexie('VocabTrainerDB');
-    db.version(1).stores({ 
-        items: '++id, deckId, termSource, termTarget, srs.dueDate' 
-    });
+    db.version(1).stores({ items: '++id, deckId, termSource, termTarget, direction, srs.dueDate' });
 
     let currentItem = null;
 
-    // 3. Logik-Funktionen
-    function getLevenshtein(a, b) {
-        const matrix = [];
-        for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-        for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-        for (let i = 1; i <= b.length; i++) {
-            for (let j = 1; j <= a.length; j++) {
-                if (b.charAt(i - 1) === a.charAt(j - 1)) matrix[i][j] = matrix[i - 1][j - 1];
-                else matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
-            }
-        }
-        return matrix[b.length][a.length];
-    }
-
+    // SM-2 Algorithmus
     function calculateSM2(item, quality) {
         let { reps, interval, easeFactor } = item.srs;
         if (quality >= 3) {
@@ -117,6 +84,19 @@
         return { reps, interval, easeFactor, dueDate: Date.now() + interval * 24 * 60 * 60 * 1000 };
     }
 
+    function getLevenshtein(a, b) {
+        const matrix = [];
+        for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+        for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+        for (let i = 1; i <= b.length; i++) {
+            for (let j = 1; j <= a.length; j++) {
+                if (b.charAt(i - 1) === a.charAt(j - 1)) matrix[i][j] = matrix[i - 1][j - 1];
+                else matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+            }
+        }
+        return matrix[b.length][a.length];
+    }
+
     function speak(text) {
         const ut = new SpeechSynthesisUtterance(text);
         ut.lang = 'sv-SE';
@@ -124,94 +104,89 @@
         window.speechSynthesis.speak(ut);
     }
 
-    // 4. UI-Aktionen
     async function loadNextItem() {
-        try {
-            const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
-            const allCount = await db.items.count();
-            document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
-        
-            if (allCount === 0) {
-                document.getElementById('display-de').innerText = "Bitte füge Vokabeln hinzu!";
-                if (document.getElementById('add-view').classList.contains('hidden')) toggleView();
-                return;
-            }
+        const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
+        const allCount = await db.items.count();
+        document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
 
-            currentItem = due.length > 0 ? due[0] : null;
-            document.getElementById('display-de').innerText = currentItem ? currentItem.termSource : "Alles erledigt! 🎉";
-            document.getElementById('user-input').value = "";
-            document.getElementById('feedback-area').innerText = "";
-        } catch (e) {
-            console.error(e);
-            document.getElementById('stats').innerText = "DB-Fehler!";
+        if (allCount === 0) {
+            document.getElementById('display-prompt').innerText = "Bitte Vokabeln hinzufügen!";
+            return;
         }
+
+        currentItem = due.length > 0 ? due[0] : null;
+        if (currentItem) {
+            document.getElementById('display-prompt').innerText = currentItem.termSource;
+            document.getElementById('direction-label').innerText = currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE";
+        } else {
+            document.getElementById('display-prompt').innerText = "Alles erledigt! 🎉";
+            document.getElementById('direction-label').innerText = "";
+        }
+        document.getElementById('user-input').value = "";
+        document.getElementById('feedback-area').innerText = "";
     }
-    
+
     async function checkAnswer() {
         if (!currentItem) return;
         const input = document.getElementById('user-input').value.trim();
-        const dist = getLevenshtein(input.toLowerCase(), currentItem.termTarget.toLowerCase()); [cite: 121]
-    
-        let quality = dist === 0 ? 5 : (dist === 1 ? 4 : (dist === 2 ? 3 : 0)); [cite: 107-112, 123]
-        await db.items.update(currentItem.id, { srs: calculateSM2(currentItem, quality) }); [cite: 113-116]
+        const dist = getLevenshtein(input.toLowerCase(), currentItem.termTarget.toLowerCase());
         
-        // Sprachausgabe nur, wenn das Ziel Schwedisch ist oder die Quelle (Prompt) Schwedisch war
-        if (currentItem.direction === 'de-sv') {
-            speak(currentItem.termTarget); 
-        } else {
-            speak(currentItem.termSource);
-        }
-    
+        let quality = dist === 0 ? 5 : (dist === 1 ? 4 : (dist === 2 ? 3 : 0));
+        await db.items.update(currentItem.id, { srs: calculateSM2(currentItem, quality) });
+        
+        // Sprachausgabe bei schwedischen Wörtern
+        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
+        else speak(currentItem.termSource);
+
         const feedback = document.getElementById('feedback-area');
         feedback.innerText = quality >= 3 ? `Richtig! (${currentItem.termTarget})` : `Falsch: ${currentItem.termTarget}`;
         feedback.style.color = quality >= 3 ? "green" : "red";
-    
+
         setTimeout(loadNextItem, 2000);
     }
 
     async function addVocab() {
-       const sv = document.getElementById('input-sv').value;
-       const de = document.getElementById('input-de').value;
-       if (!de || !sv) return;
+        const sv = document.getElementById('input-sv').value.trim();
+        const de = document.getElementById('input-de').value.trim();
+        if (!de || !sv) return;
 
-       const srsInit = () => ({ reps: 0, interval: 0, easeFactor: 2.5, dueDate: Date.now() }); [cite: 77-84]
+        const srsInit = () => ({ reps: 0, interval: 0, easeFactor: 2.5, dueDate: Date.now() });
 
-       try {
-           // Richtung 1: Deutsch -> Schwedisch (Produktion)
-           await db.items.add({
-               deckId: 1, termSource: de, termTarget: sv, direction: 'de-sv', srs: srsInit()
-           });
-           // Richtung 2: Schwedisch -> Deutsch (Verständnis)
-           await db.items.add({
-               deckId: 1, termSource: sv, termTarget: de, direction: 'sv-de', srs: srsInit()
-           });
+        await db.items.add({ deckId: 1, termSource: de, termTarget: sv, direction: 'de-sv', srs: srsInit() });
+        await db.items.add({ deckId: 1, termSource: sv, termTarget: de, direction: 'sv-de', srs: srsInit() });
 
-           document.getElementById('input-de').value = "";
-           document.getElementById('input-sv').value = "";
-           toggleView();
-           await loadNextItem(); 
-       } catch (error) {
-           alert("Speicherfehler!");
-       }
+        document.getElementById('input-de').value = "";
+        document.getElementById('input-sv').value = "";
+        renderList();
+        loadNextItem();
     }
 
-    function addChar(c) { 
-        const input = document.getElementById('user-input');
-        input.value += c; 
-        input.focus(); 
+    async function renderList() {
+        const items = await db.items.toArray();
+        document.getElementById('vocab-list').innerHTML = items.map(i => `
+            <div>
+                <span>[${i.direction.toUpperCase()}] <strong>${i.termSource}</strong> - ${i.termTarget}</span>
+                <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px; border-radius:3px;">X</button>
+            </div>
+        `).join('');
     }
+
+    async function deleteVocab(id) {
+        if (confirm("Löschen?")) { await db.items.delete(id); renderList(); loadNextItem(); }
+    }
+
+    function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
 
     function toggleView() {
         const isAdd = document.getElementById('add-view').classList.toggle('hidden');
-        document.getElementById('manage-view').classList.toggle('hidden', !isAdd); // Zeigt Liste im Add-Modus
         document.getElementById('learn-view').classList.toggle('hidden', !isAdd);
         document.getElementById('input-controls').classList.toggle('hidden', !isAdd);
-        document.getElementById('viewBtn').innerText = isAdd ? "Vokabeln verwalten" : "Zum Lernen";
+        document.getElementById('viewBtn').innerText = isAdd ? "Zum Lernen" : "Vokabeln verwalten";
         if (isAdd) renderList();
     }
 
     async function forceUpdate() {
-        if (confirm("Cache löschen und neu laden?")) {
+        if (confirm("Reset? Datenbank bleibt erhalten, Cache wird geleert.")) {
             const regs = await navigator.serviceWorker.getRegistrations();
             for (let r of regs) await r.unregister();
             const keys = await caches.keys();
@@ -220,43 +195,8 @@
         }
     }
 
-    // Liste anzeigen
-    async function renderList() {
-        const allItems = await db.items.toArray();
-        const listDiv = document.getElementById('vocab-list');
-        listDiv.innerHTML = allItems.map(item => `
-            <div style="background: white; margin-bottom: 5px; padding: 10px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center;">
-                <span><strong>${item.termSource}</strong> - ${item.termTarget}</span>
-                <div>
-                    <button onclick="editVocab(${item.id})" style="background: var(--accent); border: none; padding: 5px; border-radius: 3px;">Edit</button>
-                    <button onclick="deleteVocab(${item.id})" style="background: #ff4444; color: white; border: none; padding: 5px; border-radius: 3px; margin-left: 5px;">X</button>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    // Löschen
-    async function deleteVocab(id) {
-        if (confirm("Löschen?")) {
-            await db.items.delete(id);
-            renderList();
-            loadNextItem();
-        }
-    }
-
-    // Korrigieren (lädt Daten zurück ins Formular)
-    async function editVocab(id) {
-        const item = await db.items.get(id);
-        document.getElementById('input-de').value = item.termSource;
-        document.getElementById('input-sv').value = item.termTarget;
-        // Löscht das alte Item, damit das neue beim Speichern als "Update" fungiert
-        await db.items.delete(id); 
-        toggleView(); // Wechselt zum Formular
-    }
-
-    window.speechSynthesis.getVoices();
     loadNextItem();
 </script>
-</body>
 
+</body>
 </html>

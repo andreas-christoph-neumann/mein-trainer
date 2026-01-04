@@ -44,15 +44,15 @@
 
     <div id="add-view" class="hidden">
         <h2>Neue Vokabel</h2>
-        <input type="text" id="input-de" placeholder="Deutsch (z.B. Der Apfel)">
-        <input type="text" id="input-sv" placeholder="Schwedisch (z.B. Äpplet)" style="margin-top:10px">
+        <input type="text" id="input-sv" placeholder="Schwedisch (z.B. Äpplet)" autocapitalize="sentences" spellcheck="false">
+        <input type="text" id="input-de" placeholder="Deutsch (z.B. Der Apfel)" style="margin-top:10px" autocapitalize="sentences" spellcheck="false">
         <button class="action-btn" onclick="addVocab()">Speichern</button>
     </div>
-    <div id="manage-view" class="hidden">
-        <h2>Vokabeln verwalten</h2>
-        <div id="vocab-list"></div>
+        <div id="manage-view" class="hidden">
+            <h2>Vokabeln verwalten</h2>
+            <div id="vocab-list"></div>
+        </div>
     </div>
-</div>
 
 <div class="controls" id="input-controls">
     <div class="helper-bar">
@@ -60,7 +60,7 @@
         <button class="helper-btn" onclick="addChar('ä')">ä</button>
         <button class="helper-btn" onclick="addChar('ö')">ö</button>
     </div>
-    <input type="text" id="user-input" placeholder="Übersetzung tippen..." autocomplete="off">
+    <input type="text" id="user-input" placeholder="Übersetzung tippen..." autocomplete="off" autocapitalize="sentences" spellcheck="false">
     <button class="action-btn" id="check-btn" onclick="checkAnswer()">Prüfen</button>
 </div>
 
@@ -165,18 +165,21 @@
         setTimeout(loadNextItem, 2000);
     }
 
-    async function addVocab() {
-        const de = document.getElementById('input-de').value;
+   async function addVocab() {
+        // Reihenfolge der Zuweisung getauscht
         const sv = document.getElementById('input-sv').value;
+        const de = document.getElementById('input-de').value;
+    
         if (!de || !sv) return;
 
         try {
             await db.items.add({
                 deckId: 1,
-                termSource: de,
-                termTarget: sv,
+                termSource: de, // Deutsch bleibt Quellsprache für die Abfrage
+                termTarget: sv, // Schwedisch bleibt das Ziel [cite: 17, 73]
                 srs: { reps: 0, interval: 0, easeFactor: 2.5, dueDate: Date.now() }
             });
+
             document.getElementById('input-de').value = "";
             document.getElementById('input-sv').value = "";
             toggleView();

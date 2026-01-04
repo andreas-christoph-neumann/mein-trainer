@@ -70,27 +70,24 @@
     let currentItem = null;
 
     // 6-Stufen Leitner-System
-    function calculateSRS(item, quality) {
-        let { stage } = item.srs;
-        const intervals = {
-            1: 1,   // jeden Tag
-            2: 2,   // jeden 2. Tag
-            3: 7,   // jede Woche
-            4: 14,  // alle 2 Wochen
-            5: 30,  // jeden Monat
-            6: 180  // jedes halbe Jahr
-        };
+	function calculateSRS(item, quality) {
+		// Fallback: Wenn .stage fehlt, beginne bei 1
+		let stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
+    
+		const intervals = {
+			1: 1, 2: 2, 3: 7, 4: 14, 5: 30, 6: 180
+		};
 
-        if (quality >= 3) {
-            stage = Math.min(6, stage + 1);
-        } else {
-            stage = 1;
-        }
+		if (quality >= 3) {
+			stage = Math.min(6, stage + 1);
+		} else {
+			stage = 1;
+		}
 
-        const days = intervals[stage];
-        const dueDate = Date.now() + days * 24 * 60 * 60 * 1000;
-        return { stage, dueDate };
-    }
+		const days = intervals[stage];
+		const dueDate = Date.now() + days * 24 * 60 * 60 * 1000;
+		return { stage, dueDate };
+	}
 
     function getLevenshtein(a, b) {
         const matrix = [];
@@ -123,10 +120,12 @@
         }
 
         currentItem = due.length > 0 ? due[0] : null;
-        if (currentItem) {
-            document.getElementById('display-prompt').innerText = currentItem.termSource;
-            document.getElementById('direction-label').innerText = 
-                `${currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE"} (Stufe ${currentItem.srs.stage})`;
+        // Innerhalb von loadNextItem
+		if (currentItem) {
+			const currentStage = (currentItem.srs && currentItem.srs.stage) ? currentItem.srs.stage : 1;
+			document.getElementById('display-prompt').innerText = currentItem.termSource;
+			document.getElementById('direction-label').innerText = 
+				`${currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE"} (Stufe ${currentStage})`;
         } else {
             document.getElementById('display-prompt').innerText = "Alles erledigt! 🎉";
             document.getElementById('direction-label').innerText = "";
@@ -173,7 +172,7 @@
         const items = await db.items.toArray();
         document.getElementById('vocab-list').innerHTML = items.map(i => `
             <div>
-                <span>[Stufe ${i.srs.stage}] <strong>${i.termSource}</strong> - ${i.termTarget}</span>
+				<span>[Stufe ${i.srs.stage || 1}] <strong>${i.termSource}</strong> - ${i.termTarget}</span>
                 <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px; border-radius:3px;">X</button>
             </div>
         `).join('');

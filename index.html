@@ -26,26 +26,26 @@
         .feedback { margin-top: 10px; font-weight: bold; text-align: center; }
         #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
         
-        /* Präzise Mini-Grafik (ca. 2mm hoch) */
+        /* Ultrakleine Stufen-Grafik (ca. 1mm hoch) */
         .progress-container {
             display: inline-flex;
             align-items: flex-end;
-            gap: 1.5px;
-            height: 8px; /* Feste Höhe für ca. 2mm */
+            gap: 1px;
+            height: 4px; 
             vertical-align: baseline;
-            margin-right: 6px;
+            margin-right: 4px;
             line-height: 1;
         }
         .bar {
-            width: 1.5px; /* Schmalere Balken */
+            width: 1px; 
             background: #ccc;
-            border-radius: 0.3px;
+            border-radius: 0.2px;
         }
-        .bar1 { height: 2px; }
-        .bar2 { height: 3.5px; }
-        .bar3 { height: 5px; }
-        .bar4 { height: 6.5px; }
-        .bar5 { height: 8px; }
+        .bar1 { height: 1px; }
+        .bar2 { height: 1.8px; }
+        .bar3 { height: 2.5px; }
+        .bar4 { height: 3.2px; }
+        .bar5 { height: 4px; }
     </style>
 </head>
 <body>
@@ -198,7 +198,7 @@
                         ${getProgressIcon(i.srs.stage || 1)} 
                         <span style="margin-left: 2px;"><strong>${i.termSource}</strong> - ${i.termTarget}</span>
                     </div>
-                    <small style="color: #888; margin-left: 18px; display: block; line-height: 1.2;">${i.sentenceSource || ''}</small>
+                    <small style="color: #888; margin-left: 14px; display: block; line-height: 1.2;">${i.sentenceSource || ''}</small>
                 </div>
                 <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px 10px; border-radius:3px; font-size: 0.8rem;">X</button>
             </div>

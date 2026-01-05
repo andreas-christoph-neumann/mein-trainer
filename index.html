@@ -25,6 +25,9 @@
         .hidden { display: none; }
         .feedback { margin-top: 10px; font-weight: bold; text-align: center; }
         #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
+        
+        .edit-btn { background: var(--accent); color: #333; border: none; padding: 5px 8px; border-radius: 3px; font-size: 0.8rem; margin-right: 5px; cursor: pointer; display: inline-flex; align-items: center; }
+        .delete-btn { background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 3px; font-size: 0.8rem; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -48,170 +51,12 @@
     </div>
 
     <div id="add-view" class="hidden">
-        <h3>Neue Vokabel hinzufügen</h3>
+        <h3 id="form-title">Neue Vokabel hinzufügen</h3>
         <input type="text" id="input-sv" placeholder="Schwedisches Wort" autocapitalize="sentences">
         <input type="text" id="input-sent-sv" placeholder="Schwedischer Beispielsatz (optional)" style="margin-top:5px; font-size: 0.9rem;" autocapitalize="sentences">
         
         <input type="text" id="input-de" placeholder="Deutsche Bedeutung" style="margin-top:15px" autocapitalize="sentences">
         <input type="text" id="input-sent-de" placeholder="Deutscher Beispielsatz (optional)" style="margin-top:5px; font-size: 0.9rem;" autocapitalize="sentences">
         
-        <button class="action-btn" onclick="addVocab()">Speichern (Beide Richtungen)</button>
-        
-        <h3 style="margin-top:25px">Alle Vokabeln</h3>
-        <div id="vocab-list"></div>
-    </div>
-</div>
-
-<div class="controls" id="input-controls">
-    <div class="helper-bar">
-        <button class="helper-btn" onclick="addChar('å')">å</button>
-        <button class="helper-btn" onclick="addChar('ä')">ä</button>
-        <button class="helper-btn" onclick="addChar('ö')">ö</button>
-    </div>
-    <input type="text" id="user-input" placeholder="Antwort tippen..." autocomplete="off" autocapitalize="sentences">
-    <button class="action-btn" id="check-btn" onclick="checkAnswer()">Prüfen</button>
-</div>
-
-<script>
-    const db = new Dexie('VocabTrainerDB');
-    db.version(1).stores({ items: '++id, deckId, termSource, termTarget, direction, srs.dueDate' });
-
-    let currentItem = null;
-
-    function calculateSRS(item, quality) {
-        let stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
-        const intervals = { 1: 1, 2: 2, 3: 7, 4: 14, 5: 30, 6: 180 };
-        if (quality >= 3) { stage = Math.min(6, stage + 1); } else { stage = 1; }
-        const dueDate = Date.now() + (intervals[stage] * 24 * 60 * 60 * 1000);
-        return { stage, dueDate };
-    }
-
-    function speak(text) {
-        const ut = new SpeechSynthesisUtterance(text);
-        ut.lang = 'sv-SE';
-        ut.rate = 0.9;
-        window.speechSynthesis.speak(ut);
-    }
-
-    function getProgressIcon(stage = 1) {
-        const colors = ['#ff4444', '#ffbb33', '#ffeb3b', '#90EE90', '#006400'];
-        // Verdoppelt: Breite 14px, Höhe 8px (ca. 2mm physisch)
-        let svg = `<svg width="14" height="8" viewBox="0 0 7 4" style="vertical-align: middle; margin-right: 6px; shape-rendering: crispEdges;">`;
-        for (let i = 0; i < 5; i++) {
-            const color = (stage > i + 1) ? colors[i] : '#ccc';
-            const h = (i + 1) * 0.8;
-            svg += `<rect x="${i * 1.4}" y="${4 - h}" width="0.8" height="${h}" fill="${color}" />`;
-        }
-        svg += `</svg>`;
-        return svg;
-    }
-
-    async function loadNextItem() {
-        const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
-        const allCount = await db.items.count();
-        document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
-
-        if (allCount === 0) {
-            document.getElementById('display-prompt').innerText = "Bitte Vokabeln hinzufügen!";
-            document.getElementById('display-sentence').innerText = "";
-            return;
-        }
-
-        currentItem = due.length > 0 ? due[0] : null;
-        if (currentItem) {
-            document.getElementById('display-prompt').innerText = currentItem.termSource;
-            document.getElementById('display-sentence').innerText = currentItem.sentenceSource || "";
-            const currentStage = (currentItem.srs && currentItem.srs.stage) ? currentItem.srs.stage : 1;
-            document.getElementById('direction-label').innerHTML = 
-                getProgressIcon(currentStage) + "<span>" + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE") + "</span>";
-        } else {
-            document.getElementById('display-prompt').innerText = "Alles erledigt! 🎉";
-            document.getElementById('display-sentence').innerText = "";
-            document.getElementById('direction-label').innerHTML = "";
-        }
-        document.getElementById('user-input').value = "";
-        document.getElementById('feedback-area').innerText = "";
-    }
-
-    async function checkAnswer() {
-        if (!currentItem) return;
-        const input = document.getElementById('user-input').value.trim().toLowerCase();
-        const target = currentItem.termTarget.trim().toLowerCase();
-        const isCorrect = input === target;
-
-        await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect ? 5 : 0) });
-        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
-        else speak(currentItem.termSource);
-
-        const feedback = document.getElementById('feedback-area');
-        feedback.innerText = isCorrect ? `Richtig! (${currentItem.termTarget})` : `Falsch. Lösung: ${currentItem.termTarget}`;
-        feedback.style.color = isCorrect ? "green" : "red";
-
-        document.getElementById('check-btn').disabled = true;
-        setTimeout(() => {
-            document.getElementById('check-btn').disabled = false;
-            loadNextItem();
-        }, 2000);
-    }
-
-    async function addVocab() {
-        const sv = document.getElementById('input-sv').value.trim();
-        const de = document.getElementById('input-de').value.trim();
-        const sentSv = document.getElementById('input-sent-sv').value.trim();
-        const sentDe = document.getElementById('input-sent-de').value.trim();
-        if (!de || !sv) return;
-        const srsInit = () => ({ stage: 1, dueDate: 0 });
-        await db.items.add({ deckId: 1, termSource: de, termTarget: sv, sentenceSource: sentDe, sentenceTarget: sentSv, direction: 'de-sv', srs: srsInit() });
-        await db.items.add({ deckId: 1, termSource: sv, termTarget: de, sentenceSource: sentSv, sentenceTarget: sentDe, direction: 'sv-de', srs: srsInit() });
-        document.getElementById('input-sv').value = "";
-        document.getElementById('input-de').value = "";
-        document.getElementById('input-sent-sv').value = "";
-        document.getElementById('input-sent-de').value = "";
-        if (!document.getElementById('add-view').classList.contains('hidden')) renderList();
-        loadNextItem();
-    }
-
-    async function renderList() {
-        const items = await db.items.toArray();
-        document.getElementById('vocab-list').innerHTML = items.map(i => `
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div>
-                    <div style="display: flex; align-items: baseline; line-height: 1.2;">
-                        ${getProgressIcon(i.srs.stage || 1)} 
-                        <span style="margin-left: 2px;"><strong>${i.termSource}</strong> - ${i.termTarget}</span>
-                    </div>
-                    <small style="color: #888; margin-left: 20px; display: block; line-height: 1.2;">${i.sentenceSource || ''}</small>
-                </div>
-                <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px 10px; border-radius:3px; font-size: 0.8rem;">X</button>
-            </div>
-        `).join('');
-    }
-
-    async function deleteVocab(id) {
-        if (confirm("Löschen?")) { await db.items.delete(id); renderList(); loadNextItem(); }
-    }
-
-    function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
-
-    function toggleView() {
-        const isNowHidden = document.getElementById('add-view').classList.toggle('hidden');
-        document.getElementById('learn-view').classList.toggle('hidden', !isNowHidden);
-        document.getElementById('input-controls').classList.toggle('hidden', !isNowHidden);
-        document.getElementById('viewBtn').innerText = isNowHidden ? "Vokabeln verwalten" : "Zum Lernen";
-        if (!isNowHidden) renderList();
-    }
-
-    async function forceUpdate() {
-        if (confirm("Reset? Cache wird geleert.")) {
-            const regs = await navigator.serviceWorker.getRegistrations();
-            for (let r of regs) await r.unregister();
-            const keys = await caches.keys();
-            await Promise.all(keys.map(k => caches.delete(k)));
-            window.location.reload(true);
-        }
-    }
-
-    loadNextItem();
-</script>
-</body>
-</html>
+        <button class="action-btn" id="save-vocab-btn" onclick="addVocab()">Speichern (Beide Richtungen)</button>
+        <button class="action-btn hidden" id="cancel-edit-btn" onclick="resetForm()" style="background: #888; margin-top: 5px;">Abbrechen</button>

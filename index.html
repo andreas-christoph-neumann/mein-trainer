@@ -10,22 +10,41 @@
         :root { --primary: #0051a8; --accent: #ffcd00; --bg: #f4f4f4; }
         body { font-family: sans-serif; margin: 0; background: var(--bg); display: flex; flex-direction: column; height: 100dvh; }
         header { background: var(--primary); color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center; }
+        
         #app { flex: 1; display: flex; flex-direction: column; padding: 1rem; overflow-y: auto; }
         .card { background: white; padding: 1.5rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 1rem; }
-        .word-de { font-size: 1.8rem; font-weight: bold; color: #333; margin-bottom: 5px; }
+        .word-prompt { font-size: 1.8rem; font-weight: bold; color: #333; margin-bottom: 5px; }
         .sentence-hint { font-size: 1rem; color: #666; font-style: italic; min-height: 1.2rem; }
+        
         .controls { padding: 1rem; background: white; border-top: 1px solid #ddd; }
         .helper-bar { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px; }
         .helper-btn { padding: 10px 15px; font-size: 1.2rem; border: 1px solid #ccc; border-radius: 5px; background: #eee; }
         input { width: 100%; padding: 12px; font-size: 1rem; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; }
         .action-btn { width: 100%; padding: 15px; margin-top: 10px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; }
+        
         .hidden { display: none; }
         .feedback { margin-top: 10px; font-weight: bold; text-align: center; }
         #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
-        .vocab-entry-info { display: flex; flex-direction: column; gap: 2px; font-size: 0.9rem; }
-        .progress-container { display: inline-flex; align-items: flex-end; gap: 3px; height: 18px; vertical-align: middle; margin-right: 8px; }
-        .bar { width: 4px; background: #ccc; border-radius: 1px; }
-        .bar1 { height: 6px; } .bar2 { height: 9px; } .bar3 { height: 12px; } .bar4 { height: 15px; } .bar5 { height: 18px; }
+        
+        /* Optimierte Stufen-Grafik */
+        .progress-container {
+            display: inline-flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 1em; /* Entspricht der Schriftgröße */
+            vertical-align: baseline;
+            margin-right: 6px;
+        }
+        .bar {
+            width: 3px; /* Reduzierte Breite */
+            background: #ccc;
+            border-radius: 1px;
+        }
+        .bar1 { height: 25%; }
+        .bar2 { height: 45%; }
+        .bar3 { height: 65%; }
+        .bar4 { height: 85%; }
+        .bar5 { height: 100%; }
     </style>
 </head>
 <body>
@@ -41,8 +60,8 @@
 <div id="app">
     <div id="learn-view">
         <div class="card">
-            <div id="direction-label" style="font-size: 0.8rem; color: var(--primary); margin-bottom: 8px;"></div>
-            <div class="word-de" id="display-prompt">Bitte Vokabeln hinzufügen!</div>
+            <div id="direction-label" style="font-size: 0.9rem; color: var(--primary); margin-bottom: 8px; display: flex; align-items: center; justify-content: center;"></div>
+            <div class="word-prompt" id="display-prompt">Bitte Vokabeln hinzufügen!</div>
             <div class="sentence-hint" id="display-sentence"></div>
             <div id="feedback-area" class="feedback"></div>
         </div>
@@ -50,13 +69,13 @@
 
     <div id="add-view" class="hidden">
         <h3>Neue Vokabel hinzufügen</h3>
-        <input type="text" id="input-sv" placeholder="Schwedisches Wort (z.B. Äpplet)" autocapitalize="sentences">
+        <input type="text" id="input-sv" placeholder="Schwedisches Wort" autocapitalize="sentences">
         <input type="text" id="input-sent-sv" placeholder="Schwedischer Beispielsatz (optional)" style="margin-top:5px; font-size: 0.9rem;" autocapitalize="sentences">
         
-        <input type="text" id="input-de" placeholder="Deutsche Bedeutung (z.B. Der Apfel)" style="margin-top:15px" autocapitalize="sentences">
+        <input type="text" id="input-de" placeholder="Deutsche Bedeutung" style="margin-top:15px" autocapitalize="sentences">
         <input type="text" id="input-sent-de" placeholder="Deutscher Beispielsatz (optional)" style="margin-top:5px; font-size: 0.9rem;" autocapitalize="sentences">
         
-        <button class="action-btn" onclick="addVocab()">Speichern</button>
+        <button class="action-btn" onclick="addVocab()">Speichern (Beide Richtungen)</button>
         
         <h3 style="margin-top:25px">Alle Vokabeln</h3>
         <div id="vocab-list"></div>
@@ -75,16 +94,19 @@
 
 <script>
     const db = new Dexie('VocabTrainerDB');
-    // Schema erweitert um Beispielsatz-Felder
     db.version(1).stores({ items: '++id, deckId, termSource, termTarget, direction, srs.dueDate' });
 
     let currentItem = null;
 
+    // Leitner-System Intervalle [cite: 106, 115-116]
     function calculateSRS(item, quality) {
         let stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
         const intervals = { 1: 1, 2: 2, 3: 7, 4: 14, 5: 30, 6: 180 };
-        if (quality >= 3) { stage = Math.min(6, stage + 1); } else { stage = 1; }
-        const dueDate = Date.now() + intervals[stage] * 24 * 60 * 60 * 1000;
+        
+        if (quality >= 3) { stage = Math.min(6, stage + 1); } 
+        else { stage = 1; }
+
+        const dueDate = Date.now() + (intervals[stage] * 24 * 60 * 60 * 1000);
         return { stage, dueDate };
     }
 
@@ -93,6 +115,16 @@
         ut.lang = 'sv-SE';
         ut.rate = 0.9;
         window.speechSynthesis.speak(ut);
+    }
+
+    function getProgressIcon(stage = 1) {
+        const colors = ['#ff4444', '#ffbb33', '#ffeb3b', '#90EE90', '#006400'];
+        let html = '<div class="progress-container">';
+        for (let i = 1; i <= 5; i++) {
+            const color = (stage > i) ? colors[i-1] : '#ccc';
+            html += `<div class="bar bar${i}" style="background: ${color}"></div>`;
+        }
+        return html + '</div>';
     }
 
     async function loadNextItem() {
@@ -109,16 +141,15 @@
         currentItem = due.length > 0 ? due[0] : null;
         if (currentItem) {
             document.getElementById('display-prompt').innerText = currentItem.termSource;
-            // Zeige Beispielsatz als Kontext-Hinweis an [cite: 68]
             document.getElementById('display-sentence').innerText = currentItem.sentenceSource || "";
             
             const currentStage = (currentItem.srs && currentItem.srs.stage) ? currentItem.srs.stage : 1;
             document.getElementById('direction-label').innerHTML = 
-                getProgressIcon(currentStage) + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE");
+                getProgressIcon(currentStage) + "<span>" + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE") + "</span>";
         } else {
             document.getElementById('display-prompt').innerText = "Alles erledigt! 🎉";
             document.getElementById('display-sentence').innerText = "";
-            document.getElementById('direction-label').innerText = "";
+            document.getElementById('direction-label').innerHTML = "";
         }
         document.getElementById('user-input').value = "";
         document.getElementById('feedback-area').innerText = "";
@@ -126,9 +157,10 @@
 
     async function checkAnswer() {
         if (!currentItem) return;
-        const input = document.getElementById('user-input').value.trim();
-        const target = currentItem.termTarget.trim();
-        const isCorrect = input.toLowerCase() === target.toLowerCase();
+        const input = document.getElementById('user-input').value.trim().toLowerCase();
+        const target = currentItem.termTarget.trim().toLowerCase();
+        
+        const isCorrect = input === target; // Null-Toleranz-Vergleich
 
         await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect ? 5 : 0) });
         
@@ -136,7 +168,7 @@
         else speak(currentItem.termSource);
 
         const feedback = document.getElementById('feedback-area');
-        feedback.innerText = isCorrect ? `Richtig! (${target})` : `Falsch. Lösung: ${target}`;
+        feedback.innerText = isCorrect ? `Richtig! (${currentItem.termTarget})` : `Falsch. Lösung: ${currentItem.termTarget}`;
         feedback.style.color = isCorrect ? "green" : "red";
 
         document.getElementById('check-btn').disabled = true;
@@ -154,9 +186,8 @@
         
         if (!de || !sv) return;
 
-        const srsInit = () => ({ stage: 1, dueDate: 0 });
+        const srsInit = () => ({ stage: 1, dueDate: 0 }); // Sofortige Abfrage
 
-        // Speicherung von Wort und Satz für beide Richtungen [cite: 67, 75, 76]
         await db.items.add({ 
             deckId: 1, termSource: de, termTarget: sv, 
             sentenceSource: sentDe, sentenceTarget: sentSv,
@@ -172,7 +203,7 @@
         document.getElementById('input-de').value = "";
         document.getElementById('input-sent-sv').value = "";
         document.getElementById('input-sent-de').value = "";
-        renderList();
+        if (!document.getElementById('add-view').classList.contains('hidden')) renderList();
         loadNextItem();
     }
 
@@ -180,9 +211,12 @@
         const items = await db.items.toArray();
         document.getElementById('vocab-list').innerHTML = items.map(i => `
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div class="vocab-entry-info">
-                    <span>${getProgressIcon(i.srs.stage || 1)} <strong>${i.termSource}</strong> - ${i.termTarget}</span>
-                    <small style="color: #888;">${i.sentenceSource || ''}</small>
+                <div>
+                    <div style="display: flex; align-items: center;">
+                        ${getProgressIcon(i.srs.stage || 1)} 
+                        <strong>${i.termSource}</strong> - ${i.termTarget}
+                    </div>
+                    <small style="color: #888; margin-left: 20px;">${i.sentenceSource || ''}</small>
                 </div>
                 <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px 10px; border-radius:3px;">X</button>
             </div>
@@ -201,16 +235,6 @@
         document.getElementById('input-controls').classList.toggle('hidden', !isNowHidden);
         document.getElementById('viewBtn').innerText = isNowHidden ? "Vokabeln verwalten" : "Zum Lernen";
         if (!isNowHidden) renderList();
-    }
-
-    function getProgressIcon(stage = 1) {
-        const colors = ['#ff4444', '#ffbb33', '#ffeb3b', '#90EE90', '#006400'];
-        let html = '<div class="progress-container">';
-        for (let i = 1; i <= 5; i++) {
-            const color = (stage > i) ? colors[i-1] : '#ccc';
-            html += `<div class="bar bar${i}" style="background: ${color}"></div>`;
-        }
-        return html + '</div>';
     }
 
     async function forceUpdate() {

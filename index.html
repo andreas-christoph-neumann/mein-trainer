@@ -26,26 +26,26 @@
         .feedback { margin-top: 10px; font-weight: bold; text-align: center; }
         #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
         
-        /* Korrigierte, winzige Stufen-Grafik */
+        /* Präzise Mini-Grafik (ca. 2mm hoch) */
         .progress-container {
             display: inline-flex;
             align-items: flex-end;
             gap: 1.5px;
-            height: 0.8em; /* Etwas kleiner als die Schrift */
-            vertical-align: middle;
-            margin-right: 5px;
+            height: 8px; /* Feste Höhe für ca. 2mm */
+            vertical-align: baseline;
+            margin-right: 6px;
             line-height: 1;
         }
         .bar {
-            width: 2px; /* Sehr schmale Balken */
+            width: 1.5px; /* Schmalere Balken */
             background: #ccc;
-            border-radius: 0.5px;
+            border-radius: 0.3px;
         }
-        .bar1 { height: 25%; }
-        .bar2 { height: 45%; }
-        .bar3 { height: 65%; }
-        .bar4 { height: 85%; }
-        .bar5 { height: 100%; }
+        .bar1 { height: 2px; }
+        .bar2 { height: 3.5px; }
+        .bar3 { height: 5px; }
+        .bar4 { height: 6.5px; }
+        .bar5 { height: 8px; }
     </style>
 </head>
 <body>
@@ -192,13 +192,13 @@
     async function renderList() {
         const items = await db.items.toArray();
         document.getElementById('vocab-list').innerHTML = items.map(i => `
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; font-size: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div>
-                    <div style="display: flex; align-items: center; line-height: 1.2;">
+                    <div style="display: flex; align-items: baseline; line-height: 1.2;">
                         ${getProgressIcon(i.srs.stage || 1)} 
                         <span style="margin-left: 2px;"><strong>${i.termSource}</strong> - ${i.termTarget}</span>
                     </div>
-                    <small style="color: #888; margin-left: 22px; display: block; line-height: 1.2;">${i.sentenceSource || ''}</small>
+                    <small style="color: #888; margin-left: 18px; display: block; line-height: 1.2;">${i.sentenceSource || ''}</small>
                 </div>
                 <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px 10px; border-radius:3px; font-size: 0.8rem;">X</button>
             </div>

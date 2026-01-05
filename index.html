@@ -174,6 +174,7 @@
         const de = customData ? customData.de : document.getElementById('input-de').value.trim();
         const tags = customData ? customData.tags : document.getElementById('input-tags').value.trim();
         if (!de || !sv) return;
+        
         if (editingId && !customData) {
             const isDeSv = document.getElementById('form-title').innerText.includes("DE-SV");
             await db.items.update(editingId, { termSource: isDeSv ? de : sv, termTarget: isDeSv ? sv : de, tags: tags });
@@ -202,13 +203,22 @@
                 const data = JSON.parse(e.target.result);
                 if (Array.isArray(data)) {
                     for (const entry of data) {
-                        // Importiert sowohl einfache Paare als auch vollständige SRS-Datensätze
-                        if (entry.sv && entry.de) await addVocab(entry);
-                        else await db.items.add(entry);
+                        // Lösche die ID aus der Datei, damit die Datenbank neue IDs vergibt
+                        delete entry.id; 
+                        
+                        if (entry.sv && entry.de) {
+                            // Format aus Lektions-Snippets
+                            await addVocab(entry);
+                        } else if (entry.termSource && entry.termTarget) {
+                            // Format aus dem Backup-Export
+                            await db.items.add(entry);
+                        }
                     }
-                    alert("Import erfolgreich!"); renderList(); loadNextItem();
+                    alert("Import erfolgreich!"); 
+                    renderList(); 
+                    loadNextItem();
                 }
-            } catch (err) { alert("Fehler beim Import!"); }
+            } catch (err) { alert("Fehler beim Import: " + err.message); }
         };
         reader.readAsText(file);
     }

@@ -26,18 +26,18 @@
         .feedback { margin-top: 10px; font-weight: bold; text-align: center; }
         #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
         
-        /* Minimale Stufen-Grafik (Höhe 2px, Breite 0,5px) */
+        /* Minimale Stufen-Grafik (Höhe 2px, Breite 0,25px) */
         .progress-container {
             display: inline-flex;
             align-items: flex-end;
-            gap: 0.5px;
+            gap: 0.25px;
             height: 2px; 
             vertical-align: baseline;
             margin-right: 3px;
             line-height: 1;
         }
         .bar {
-            width: 0.5px; 
+            width: 0.25px; 
             background: #ccc;
         }
         .bar1 { height: 0.5px; }
@@ -197,7 +197,7 @@
                         ${getProgressIcon(i.srs.stage || 1)} 
                         <span style="margin-left: 2px;"><strong>${i.termSource}</strong> - ${i.termTarget}</span>
                     </div>
-                    <small style="color: #888; margin-left: 10px; display: block; line-height: 1.2;">${i.sentenceSource || ''}</small>
+                    <small style="color: #888; margin-left: 8px; display: block; line-height: 1.2;">${i.sentenceSource || ''}</small>
                 </div>
                 <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px 10px; border-radius:3px; font-size: 0.8rem;">X</button>
             </div>

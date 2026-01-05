@@ -7,21 +7,31 @@
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
-        :root { --primary: #0051a8; --accent: #ffcd00; --bg: #f4f4f4; }
+        :root { --primary: #0051a8; --accent: #ffcd00; --bg: #f4f4f4; --grammar: #7f8c8d; --style: #d35400; }
         body { font-family: sans-serif; margin: 0; background: var(--bg); display: flex; flex-direction: column; height: 100dvh; }
         header { background: var(--primary); color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center; }
+        
         #app { flex: 1; display: flex; flex-direction: column; padding: 1rem; overflow-y: auto; }
         .card { background: white; padding: 1.5rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 1rem; }
         .word-prompt { font-size: 1.8rem; font-weight: bold; color: #333; margin-bottom: 5px; }
-        .sentence-hint { font-size: 1rem; color: #666; font-style: italic; min-height: 1.2rem; }
+        .sentence-hint { font-size: 1rem; color: #666; font-style: italic; min-height: 1.2rem; margin-top: 5px; }
+        
+        /* Badge Styles */
+        .badge-container { display: flex; justify-content: center; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+        .badge { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; color: white; font-weight: bold; text-transform: uppercase; }
+        .bg-grammar { background-color: var(--grammar); }
+        .bg-style { background-color: var(--style); }
+
         .controls { padding: 1rem; background: white; border-top: 1px solid #ddd; }
         .helper-bar { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px; }
         .helper-btn { padding: 10px 15px; font-size: 1.2rem; border: 1px solid #ccc; border-radius: 5px; background: #eee; }
         input { width: 100%; padding: 12px; font-size: 1rem; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; }
         .action-btn { width: 100%; padding: 15px; margin-top: 10px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; }
+        
         .hidden { display: none; }
         .feedback { margin-top: 10px; font-weight: bold; text-align: center; }
         #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
+        
         .edit-btn { background: var(--accent); color: #333; border: none; padding: 5px 8px; border-radius: 3px; font-size: 0.8rem; margin-right: 5px; cursor: pointer; display: inline-flex; align-items: center; }
         .delete-btn { background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 3px; font-size: 0.8rem; cursor: pointer; }
     </style>
@@ -41,6 +51,7 @@
         <div class="card">
             <div id="direction-label" style="font-size: 0.9rem; color: var(--primary); margin-bottom: 8px; display: flex; align-items: center; justify-content: center;"></div>
             <div class="word-prompt" id="display-prompt">Bitte Vokabeln hinzufügen!</div>
+            <div id="display-badges" class="badge-container"></div>
             <div class="sentence-hint" id="display-sentence"></div>
             <div id="feedback-area" class="feedback"></div>
         </div>
@@ -53,6 +64,8 @@
         
         <input type="text" id="input-de" placeholder="Deutsche Bedeutung" style="margin-top:15px" autocapitalize="sentences">
         <input type="text" id="input-sent-de" placeholder="Deutscher Beispielsatz (optional)" style="margin-top:5px; font-size: 0.9rem;" autocapitalize="sentences">
+        
+        <input type="text" id="input-tags" placeholder="Zusatzinfo (z.B. 3. Deklination, ugs.)" style="margin-top:15px; border-color: var(--grammar);" autocapitalize="none">
         
         <button class="action-btn" id="save-vocab-btn" onclick="addVocab()">Speichern (Beide Richtungen)</button>
         <button class="action-btn hidden" id="cancel-edit-btn" onclick="resetForm()" style="background: #888; margin-top: 5px;">Abbrechen</button>
@@ -79,26 +92,20 @@
     let currentItem = null;
     let editingId = null;
 
-    // SRS Logik mit Zufallselementen zur Vermeidung von Lernmustern
     function calculateSRS(item, quality) {
         let stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
-
-        if (quality >= 3) {
-            stage = Math.min(6, stage + 1);
-        } else {
-            stage = 1; // Reset bei Fehlern
-        }
-
+        if (quality >= 3) { stage = Math.min(6, stage + 1); } else { stage = 1; }
+        
         let days;
         const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
         switch (stage) {
-            case 1: days = 1; break; // 24h
-            case 2: days = 2; break; // 2 Tage
-            case 3: days = rand(6, 8); break; // 6-8 Tage
-            case 4: days = rand(12, 16); break; // 12-16 Tage
-            case 5: days = rand(25, 35); break; // 25-35 Tage
-            case 6: days = rand(150, 200); break; // 150-200 Tage
+            case 1: days = 1; break;
+            case 2: days = 2; break;
+            case 3: days = rand(6, 8); break;
+            case 4: days = rand(12, 16); break;
+            case 5: days = rand(25, 35); break;
+            case 6: days = rand(150, 200); break;
             default: days = 1;
         }
 
@@ -111,6 +118,18 @@
         ut.lang = 'sv-SE';
         ut.rate = 0.9;
         window.speechSynthesis.speak(ut);
+    }
+
+    // Wandelt Komma-Text in farbige Badges um
+    function renderBadges(tagsString) {
+        if (!tagsString) return "";
+        const styleKeywords = ['ugs.', 'formell', 'slang', 'fam.', 'poet.', 'arch.', 'lit.'];
+        return tagsString.split(',').map(tag => {
+            const t = tag.trim();
+            if (!t) return "";
+            const isStyle = styleKeywords.some(k => t.toLowerCase().includes(k));
+            return `<span class="badge ${isStyle ? 'bg-style' : 'bg-grammar'}">${t}</span>`;
+        }).join('');
     }
 
     function getProgressIcon(stage = 1) {
@@ -133,21 +152,24 @@
         if (allCount === 0) {
             document.getElementById('display-prompt').innerText = "Bitte Vokabeln hinzufügen!";
             document.getElementById('display-sentence').innerText = "";
+            document.getElementById('display-badges').innerHTML = "";
             return;
         }
 
-        // Zufällige Auswahl aus allen fälligen Vokabeln
         currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
 
         if (currentItem) {
             document.getElementById('display-prompt').innerText = currentItem.termSource;
             document.getElementById('display-sentence').innerText = currentItem.sentenceSource || "";
+            document.getElementById('display-badges').innerHTML = renderBadges(currentItem.tags);
+            
             const currentStage = (currentItem.srs && currentItem.srs.stage) ? currentItem.srs.stage : 1;
             document.getElementById('direction-label').innerHTML = 
                 getProgressIcon(currentStage) + "<span>" + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE") + "</span>";
         } else {
             document.getElementById('display-prompt').innerText = "Alles erledigt! 🎉";
             document.getElementById('display-sentence').innerText = "";
+            document.getElementById('display-badges').innerHTML = "";
             document.getElementById('direction-label').innerHTML = "";
         }
         document.getElementById('user-input').value = "";
@@ -180,6 +202,8 @@
         const de = document.getElementById('input-de').value.trim();
         const sentSv = document.getElementById('input-sent-sv').value.trim();
         const sentDe = document.getElementById('input-sent-de').value.trim();
+        const tags = document.getElementById('input-tags').value.trim();
+        
         if (!de || !sv) return;
 
         if (editingId) {
@@ -188,13 +212,14 @@
                 termSource: isDeSv ? de : sv,
                 termTarget: isDeSv ? sv : de,
                 sentenceSource: isDeSv ? sentDe : sentSv,
-                sentenceTarget: isDeSv ? sentSv : sentDe
+                sentenceTarget: isDeSv ? sentSv : sentDe,
+                tags: tags
             });
             resetForm();
         } else {
-            const srsInit = () => ({ stage: 1, dueDate: 0 }); // Neue Vokabeln: Sofort
-            await db.items.add({ deckId: 1, termSource: de, termTarget: sv, sentenceSource: sentDe, sentenceTarget: sentSv, direction: 'de-sv', srs: srsInit() });
-            await db.items.add({ deckId: 1, termSource: sv, termTarget: de, sentenceSource: sentSv, sentenceTarget: sentDe, direction: 'sv-de', srs: srsInit() });
+            const srsInit = () => ({ stage: 1, dueDate: 0 });
+            await db.items.add({ deckId: 1, termSource: de, termTarget: sv, sentenceSource: sentDe, sentenceTarget: sentSv, tags: tags, direction: 'de-sv', srs: srsInit() });
+            await db.items.add({ deckId: 1, termSource: sv, termTarget: de, sentenceSource: sentSv, sentenceTarget: sentDe, tags: tags, direction: 'sv-de', srs: srsInit() });
             resetForm();
         }
         renderList();
@@ -210,6 +235,8 @@
         document.getElementById('input-de').value = isDeSv ? item.termSource : item.termTarget;
         document.getElementById('input-sent-sv').value = isDeSv ? item.sentenceTarget : item.sentenceSource;
         document.getElementById('input-sent-de').value = isDeSv ? item.sentenceSource : item.sentenceTarget;
+        document.getElementById('input-tags').value = item.tags || "";
+        
         document.getElementById('form-title').innerText = `Vokabel editieren (${item.direction.toUpperCase()})`;
         document.getElementById('save-vocab-btn').innerText = "Änderungen speichern";
         document.getElementById('cancel-edit-btn').classList.remove('hidden');
@@ -222,6 +249,7 @@
         document.getElementById('input-de').value = "";
         document.getElementById('input-sent-sv').value = "";
         document.getElementById('input-sent-de').value = "";
+        document.getElementById('input-tags').value = "";
         document.getElementById('form-title').innerText = "Neue Vokabel hinzufügen";
         document.getElementById('save-vocab-btn').innerText = "Speichern (Beide Richtungen)";
         document.getElementById('cancel-edit-btn').classList.add('hidden');
@@ -232,9 +260,10 @@
         document.getElementById('vocab-list').innerHTML = items.map(i => `
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div>
-                    <div style="display: flex; align-items: baseline; line-height: 1.2;">
+                    <div style="display: flex; align-items: baseline; line-height: 1.2; flex-wrap: wrap; gap: 4px;">
                         ${getProgressIcon(i.srs.stage || 1)} 
-                        <span style="margin-left: 2px;"><strong>${i.termSource}</strong> - ${i.termTarget}</span>
+                        <strong>${i.termSource}</strong> - ${i.termTarget}
+                        ${renderBadges(i.tags)}
                     </div>
                     <small style="color: #888; margin-left: 20px; display: block; line-height: 1.2;">${i.sentenceSource || ''}</small>
                 </div>

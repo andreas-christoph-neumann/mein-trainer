@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Svenska Trainer</title>
-    <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
         :root { --primary: #0051a8; --accent: #ffcd00; --bg: #f4f4f4; --grammar: #7f8c8d; --style: #d35400; }
@@ -28,6 +27,8 @@
         #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
         .edit-btn { background: var(--accent); color: #333; border: none; padding: 5px 8px; border-radius: 3px; font-size: 0.8rem; margin-right: 5px; cursor: pointer; display: inline-flex; align-items: center; }
         .delete-btn { background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 3px; font-size: 0.8rem; cursor: pointer; }
+        .backup-bar { display: flex; gap: 10px; margin-top: 20px; border-top: 2px solid #ddd; padding-top: 15px; }
+        .backup-btn { flex: 1; padding: 10px; font-size: 0.9rem; border-radius: 5px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -58,8 +59,16 @@
         <input type="text" id="input-de" placeholder="Deutsch (Synonyme mit / trennen)" style="margin-top:15px" autocapitalize="sentences">
         <input type="text" id="input-sent-de" placeholder="Deutscher Beispielsatz (optional)" style="margin-top:5px; font-size: 0.9rem;" autocapitalize="sentences">
         <input type="text" id="input-tags" placeholder="Zusatzinfo (z.B. 3. Deklination, ugs.)" style="margin-top:15px; border-color: var(--grammar);" autocapitalize="none">
+        
         <button class="action-btn" id="save-vocab-btn" onclick="addVocab()">Speichern (Beide Richtungen)</button>
         <button class="action-btn hidden" id="cancel-edit-btn" onclick="resetForm()" style="background: #888; margin-top: 5px;">Abbrechen</button>
+        
+        <div class="backup-bar">
+            <button class="backup-btn" onclick="exportData()">Backup Export (JSON)</button>
+            <button class="backup-btn" onclick="document.getElementById('importFile').click()">Import (JSON)</button>
+            <input type="file" id="importFile" class="hidden" accept=".json" onchange="importData(event)">
+        </div>
+
         <h3 style="margin-top:25px">Alle Vokabeln</h3>
         <div id="vocab-list"></div>
     </div>
@@ -84,7 +93,7 @@
 
     function calculateSRS(item, quality) {
         let stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
-        if (quality >= 3) { stage = Math.min(6, stage + 1); } else { stage = 1; }
+        stage = (quality >= 3) ? Math.min(6, stage + 1) : 1;
         const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
         let days;
         switch (stage) {
@@ -100,9 +109,8 @@
     }
 
     function speak(text) {
-        const ut = new SpeechSynthesisUtterance(text.split('/')[0]); // Spricht nur das erste Synonym
-        ut.lang = 'sv-SE';
-        ut.rate = 0.9;
+        const ut = new SpeechSynthesisUtterance(text.split('/')[0]);
+        ut.lang = 'sv-SE'; ut.rate = 0.9;
         window.speechSynthesis.speak(ut);
     }
 
@@ -131,10 +139,7 @@
         const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
         const allCount = await db.items.count();
         document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
-        if (allCount === 0) {
-            document.getElementById('display-prompt').innerText = "Bitte Vokabeln hinzufügen!";
-            return;
-        }
+        if (allCount === 0) { document.getElementById('display-prompt').innerText = "Vokabeln hinzufügen!"; return; }
         currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
         if (currentItem) {
             document.getElementById('display-prompt').innerText = currentItem.termSource;
@@ -144,25 +149,19 @@
             document.getElementById('direction-label').innerHTML = getProgressIcon(currentStage) + "<span>" + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE") + "</span>";
         } else {
             document.getElementById('display-prompt').innerText = "Alles erledigt! 🎉";
-            document.getElementById('display-sentence').innerText = "";
-            document.getElementById('display-badges').innerHTML = "";
+            document.getElementById('display-sentence').innerText = ""; document.getElementById('display-badges').innerHTML = "";
             document.getElementById('direction-label').innerHTML = "";
         }
-        document.getElementById('user-input').value = "";
-        document.getElementById('feedback-area').innerText = "";
+        document.getElementById('user-input').value = ""; document.getElementById('feedback-area').innerText = "";
     }
 
     async function checkAnswer() {
         if (!currentItem) return;
         const input = document.getElementById('user-input').value.trim().toLowerCase();
-        // Spaltet termTarget an jedem "/" auf und vergleicht mit der Eingabe
         const targets = currentItem.termTarget.split('/').map(t => t.trim().toLowerCase());
         const isCorrect = targets.includes(input);
-
         await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect ? 5 : 0) });
-        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
-        else speak(currentItem.termSource);
-
+        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
         const feedback = document.getElementById('feedback-area');
         feedback.innerText = isCorrect ? `Richtig! (${currentItem.termTarget})` : `Falsch. Lösung: ${currentItem.termTarget}`;
         feedback.style.color = isCorrect ? "green" : "red";
@@ -170,24 +169,48 @@
         setTimeout(() => { document.getElementById('check-btn').disabled = false; loadNextItem(); }, 2000);
     }
 
-    async function addVocab() {
-        const sv = document.getElementById('input-sv').value.trim();
-        const de = document.getElementById('input-de').value.trim();
-        const sentSv = document.getElementById('input-sent-sv').value.trim();
-        const sentDe = document.getElementById('input-sent-de').value.trim();
-        const tags = document.getElementById('input-tags').value.trim();
+    async function addVocab(customData = null) {
+        const sv = customData ? customData.sv : document.getElementById('input-sv').value.trim();
+        const de = customData ? customData.de : document.getElementById('input-de').value.trim();
+        const tags = customData ? customData.tags : document.getElementById('input-tags').value.trim();
         if (!de || !sv) return;
-        if (editingId) {
-            const isDeSv = document.getElementById('form-title').innerText.includes("DE-SV") || document.getElementById('form-title').innerText.includes("DE ➔ SV");
-            await db.items.update(editingId, { termSource: isDeSv ? de : sv, termTarget: isDeSv ? sv : de, sentenceSource: isDeSv ? sentDe : sentSv, sentenceTarget: isDeSv ? sentSv : sentDe, tags: tags });
+        if (editingId && !customData) {
+            const isDeSv = document.getElementById('form-title').innerText.includes("DE-SV");
+            await db.items.update(editingId, { termSource: isDeSv ? de : sv, termTarget: isDeSv ? sv : de, tags: tags });
             resetForm();
         } else {
             const srsInit = () => ({ stage: 1, dueDate: 0 });
-            await db.items.add({ deckId: 1, termSource: de, termTarget: sv, sentenceSource: sentDe, sentenceTarget: sentSv, tags: tags, direction: 'de-sv', srs: srsInit() });
-            await db.items.add({ deckId: 1, termSource: sv, termTarget: de, sentenceSource: sentSv, sentenceTarget: sentDe, tags: tags, direction: 'sv-de', srs: srsInit() });
-            resetForm();
+            await db.items.add({ deckId: 1, termSource: de, termTarget: sv, direction: 'de-sv', tags: tags, srs: srsInit() });
+            await db.items.add({ deckId: 1, termSource: sv, termTarget: de, direction: 'sv-de', tags: tags, srs: srsInit() });
+            if(!customData) resetForm();
         }
         renderList(); loadNextItem();
+    }
+
+    async function exportData() {
+        const items = await db.items.toArray();
+        const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'svenska_backup.json'; a.click();
+    }
+
+    async function importData(event) {
+        const file = event.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (Array.isArray(data)) {
+                    for (const entry of data) {
+                        // Importiert sowohl einfache Paare als auch vollständige SRS-Datensätze
+                        if (entry.sv && entry.de) await addVocab(entry);
+                        else await db.items.add(entry);
+                    }
+                    alert("Import erfolgreich!"); renderList(); loadNextItem();
+                }
+            } catch (err) { alert("Fehler beim Import!"); }
+        };
+        reader.readAsText(file);
     }
 
     async function editVocab(id) {
@@ -195,8 +218,6 @@
         editingId = id; const isDeSv = item.direction === 'de-sv';
         document.getElementById('input-sv').value = isDeSv ? item.termTarget : item.termSource;
         document.getElementById('input-de').value = isDeSv ? item.termSource : item.termTarget;
-        document.getElementById('input-sent-sv').value = isDeSv ? item.sentenceTarget : item.sentenceSource;
-        document.getElementById('input-sent-de').value = isDeSv ? item.sentenceSource : item.sentenceTarget;
         document.getElementById('input-tags').value = item.tags || "";
         document.getElementById('form-title').innerText = `Vokabel editieren (${item.direction.toUpperCase()})`;
         document.getElementById('save-vocab-btn').innerText = "Änderungen speichern";
@@ -205,11 +226,8 @@
     }
 
     function resetForm() {
-        editingId = null;
-        document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = "";
-        document.getElementById('input-sent-sv').value = ""; document.getElementById('input-sent-de').value = "";
-        document.getElementById('input-tags').value = "";
-        document.getElementById('form-title').innerText = "Neue Vokabel hinzufügen";
+        editingId = null; document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = "";
+        document.getElementById('input-tags').value = ""; document.getElementById('form-title').innerText = "Neue Vokabel hinzufügen";
         document.getElementById('save-vocab-btn').innerText = "Speichern (Beide Richtungen)";
         document.getElementById('cancel-edit-btn').classList.add('hidden');
     }
@@ -220,16 +238,11 @@
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div>
                     <div style="display: flex; align-items: baseline; line-height: 1.2; flex-wrap: wrap; gap: 4px;">
-                        ${getProgressIcon(i.srs.stage || 1)} 
-                        <strong>${i.termSource}</strong> - ${i.termTarget}
-                        ${renderBadges(i.tags)}
+                        ${getProgressIcon(i.srs.stage || 1)} <strong>${i.termSource}</strong> - ${i.termTarget} ${renderBadges(i.tags)}
                     </div>
-                    <small style="color: #888; margin-left: 20px; display: block; line-height: 1.2;">${i.sentenceSource || ''}</small>
                 </div>
                 <div style="display: flex; gap: 5px;">
-                    <button class="edit-btn" onclick="editVocab(${i.id})">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
-                    </button>
+                    <button class="edit-btn" onclick="editVocab(${i.id})">✎</button>
                     <button class="delete-btn" onclick="deleteVocab(${i.id})">X</button>
                 </div>
             </div>
@@ -245,15 +258,7 @@
         document.getElementById('viewBtn').innerText = isNowHidden ? "Vokabeln verwalten" : "Zum Lernen";
         if (!isNowHidden) { resetForm(); renderList(); }
     }
-    async function forceUpdate() {
-        if (confirm("Reset? Cache wird geleert.")) {
-            const regs = await navigator.serviceWorker.getRegistrations();
-            for (let r of regs) await r.unregister();
-            const keys = await caches.keys();
-            await Promise.all(keys.map(k => caches.delete(k)));
-            window.location.reload(true);
-        }
-    }
+    async function forceUpdate() { location.reload(true); }
     loadNextItem();
 </script>
 </body>

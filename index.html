@@ -26,19 +26,20 @@
         .feedback { margin-top: 10px; font-weight: bold; text-align: center; }
         #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
         
-        /* Einheitliche Stufen-Grafik */
+        /* Korrigierte, winzige Stufen-Grafik */
         .progress-container {
             display: inline-flex;
             align-items: flex-end;
-            gap: 2px;
-            height: 1em; /* Skaliert mit der jeweiligen Schriftgröße */
-            vertical-align: baseline;
-            margin-right: 6px;
+            gap: 1.5px;
+            height: 0.8em; /* Etwas kleiner als die Schrift */
+            vertical-align: middle;
+            margin-right: 5px;
+            line-height: 1;
         }
         .bar {
-            width: 3px; 
+            width: 2px; /* Sehr schmale Balken */
             background: #ccc;
-            border-radius: 1px;
+            border-radius: 0.5px;
         }
         .bar1 { height: 25%; }
         .bar2 { height: 45%; }
@@ -191,15 +192,15 @@
     async function renderList() {
         const items = await db.items.toArray();
         document.getElementById('vocab-list').innerHTML = items.map(i => `
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; font-size: 1rem;">
                 <div>
-                    <div style="display: flex; align-items: center; font-size: 1rem;">
+                    <div style="display: flex; align-items: center; line-height: 1.2;">
                         ${getProgressIcon(i.srs.stage || 1)} 
                         <span style="margin-left: 2px;"><strong>${i.termSource}</strong> - ${i.termTarget}</span>
                     </div>
-                    <small style="color: #888; margin-left: 22px; display: block;">${i.sentenceSource || ''}</small>
+                    <small style="color: #888; margin-left: 22px; display: block; line-height: 1.2;">${i.sentenceSource || ''}</small>
                 </div>
-                <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px 10px; border-radius:3px;">X</button>
+                <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px 10px; border-radius:3px; font-size: 0.8rem;">X</button>
             </div>
         `).join('');
     }

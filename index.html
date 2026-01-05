@@ -26,17 +26,17 @@
         .feedback { margin-top: 10px; font-weight: bold; text-align: center; }
         #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
         
-        /* Optimierte Stufen-Grafik */
+        /* Einheitliche Stufen-Grafik */
         .progress-container {
             display: inline-flex;
             align-items: flex-end;
             gap: 2px;
-            height: 1em; /* Entspricht der Schriftgröße */
+            height: 1em; /* Skaliert mit der jeweiligen Schriftgröße */
             vertical-align: baseline;
             margin-right: 6px;
         }
         .bar {
-            width: 3px; /* Reduzierte Breite */
+            width: 3px; 
             background: #ccc;
             border-radius: 1px;
         }
@@ -98,14 +98,10 @@
 
     let currentItem = null;
 
-    // Leitner-System Intervalle [cite: 106, 115-116]
     function calculateSRS(item, quality) {
         let stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
         const intervals = { 1: 1, 2: 2, 3: 7, 4: 14, 5: 30, 6: 180 };
-        
-        if (quality >= 3) { stage = Math.min(6, stage + 1); } 
-        else { stage = 1; }
-
+        if (quality >= 3) { stage = Math.min(6, stage + 1); } else { stage = 1; }
         const dueDate = Date.now() + (intervals[stage] * 24 * 60 * 60 * 1000);
         return { stage, dueDate };
     }
@@ -142,7 +138,6 @@
         if (currentItem) {
             document.getElementById('display-prompt').innerText = currentItem.termSource;
             document.getElementById('display-sentence').innerText = currentItem.sentenceSource || "";
-            
             const currentStage = (currentItem.srs && currentItem.srs.stage) ? currentItem.srs.stage : 1;
             document.getElementById('direction-label').innerHTML = 
                 getProgressIcon(currentStage) + "<span>" + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE") + "</span>";
@@ -159,11 +154,9 @@
         if (!currentItem) return;
         const input = document.getElementById('user-input').value.trim().toLowerCase();
         const target = currentItem.termTarget.trim().toLowerCase();
-        
-        const isCorrect = input === target; // Null-Toleranz-Vergleich
+        const isCorrect = input === target;
 
         await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect ? 5 : 0) });
-        
         if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
         else speak(currentItem.termSource);
 
@@ -183,22 +176,10 @@
         const de = document.getElementById('input-de').value.trim();
         const sentSv = document.getElementById('input-sent-sv').value.trim();
         const sentDe = document.getElementById('input-sent-de').value.trim();
-        
         if (!de || !sv) return;
-
-        const srsInit = () => ({ stage: 1, dueDate: 0 }); // Sofortige Abfrage
-
-        await db.items.add({ 
-            deckId: 1, termSource: de, termTarget: sv, 
-            sentenceSource: sentDe, sentenceTarget: sentSv,
-            direction: 'de-sv', srs: srsInit() 
-        });
-        await db.items.add({ 
-            deckId: 1, termSource: sv, termTarget: de, 
-            sentenceSource: sentSv, sentenceTarget: sentDe,
-            direction: 'sv-de', srs: srsInit() 
-        });
-
+        const srsInit = () => ({ stage: 1, dueDate: 0 });
+        await db.items.add({ deckId: 1, termSource: de, termTarget: sv, sentenceSource: sentDe, sentenceTarget: sentSv, direction: 'de-sv', srs: srsInit() });
+        await db.items.add({ deckId: 1, termSource: sv, termTarget: de, sentenceSource: sentSv, sentenceTarget: sentDe, direction: 'sv-de', srs: srsInit() });
         document.getElementById('input-sv').value = "";
         document.getElementById('input-de').value = "";
         document.getElementById('input-sent-sv').value = "";
@@ -212,11 +193,11 @@
         document.getElementById('vocab-list').innerHTML = items.map(i => `
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div>
-                    <div style="display: flex; align-items: center;">
+                    <div style="display: flex; align-items: center; font-size: 1rem;">
                         ${getProgressIcon(i.srs.stage || 1)} 
-                        <strong>${i.termSource}</strong> - ${i.termTarget}
+                        <span style="margin-left: 2px;"><strong>${i.termSource}</strong> - ${i.termTarget}</span>
                     </div>
-                    <small style="color: #888; margin-left: 20px;">${i.sentenceSource || ''}</small>
+                    <small style="color: #888; margin-left: 22px; display: block;">${i.sentenceSource || ''}</small>
                 </div>
                 <button onclick="deleteVocab(${i.id})" style="background:#ff4444; color:white; border:none; padding:5px 10px; border-radius:3px;">X</button>
             </div>

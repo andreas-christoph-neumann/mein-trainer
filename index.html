@@ -79,12 +79,30 @@
     let currentItem = null;
     let editingId = null;
 
+    // SRS Logik mit Zufallselementen zur Vermeidung von Lernmustern
     function calculateSRS(item, quality) {
         let stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
-        const intervals = { 1: 1, 2: 2, 3: 7, 4: 14, 5: 30, 6: 180 };
-        if (quality >= 3) { stage = Math.min(6, stage + 1); } 
-        else { stage = 1; }
-        const dueDate = Date.now() + (intervals[stage] * 24 * 60 * 60 * 1000);
+
+        if (quality >= 3) {
+            stage = Math.min(6, stage + 1);
+        } else {
+            stage = 1; // Reset bei Fehlern
+        }
+
+        let days;
+        const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+        switch (stage) {
+            case 1: days = 1; break; // 24h
+            case 2: days = 2; break; // 2 Tage
+            case 3: days = rand(6, 8); break; // 6-8 Tage
+            case 4: days = rand(12, 16); break; // 12-16 Tage
+            case 5: days = rand(25, 35); break; // 25-35 Tage
+            case 6: days = rand(150, 200); break; // 150-200 Tage
+            default: days = 1;
+        }
+
+        const dueDate = Date.now() + (days * 24 * 60 * 60 * 1000);
         return { stage, dueDate };
     }
 
@@ -118,7 +136,7 @@
             return;
         }
 
-        // Zufällige Auswahl aus den fälligen Elementen
+        // Zufällige Auswahl aus allen fälligen Vokabeln
         currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
 
         if (currentItem) {
@@ -174,7 +192,7 @@
             });
             resetForm();
         } else {
-            const srsInit = () => ({ stage: 1, dueDate: 0 });
+            const srsInit = () => ({ stage: 1, dueDate: 0 }); // Neue Vokabeln: Sofort
             await db.items.add({ deckId: 1, termSource: de, termTarget: sv, sentenceSource: sentDe, sentenceTarget: sentSv, direction: 'de-sv', srs: srsInit() });
             await db.items.add({ deckId: 1, termSource: sv, termTarget: de, sentenceSource: sentSv, sentenceTarget: sentDe, direction: 'sv-de', srs: srsInit() });
             resetForm();

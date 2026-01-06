@@ -90,18 +90,43 @@
     let currentItem = null;
     let inlineEditingId = null;
 
+    // Angepasste Logik für Abfrageintervalle
     function calculateSRS(item, correct) {
-        let stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
-        stage = correct ? Math.min(6, stage + 1) : 1;
+        let currentStage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
         const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-        let days = stage === 1 ? 1 : stage === 2 ? 2 : stage === 3 ? rand(6, 8) : stage === 4 ? rand(12, 16) : stage === 5 ? rand(25, 35) : rand(150, 200);
-        return { stage, dueDate: Date.now() + (days * 24 * 60 * 60 * 1000) };
+
+        if (!correct) {
+            // Bei Fehler: Zurück auf Stufe 1 und Fälligkeit auf 0 (bleibt fällig)
+            return { stage: 1, dueDate: 0 };
+        }
+
+        // Bei korrekter Antwort: Stufe erhöhen
+        let nextStage = Math.min(6, currentStage + 1);
+        let msToAdd = 0;
+
+        if (nextStage === 2) {
+            // Stufe 2: 20 bis 50 Stunden
+            msToAdd = rand(20, 50) * 60 * 60 * 1000;
+        } else if (nextStage === 3) {
+            // Stufe 3: 5 bis 10 Tage
+            msToAdd = rand(5, 10) * 24 * 60 * 60 * 1000;
+        } else if (nextStage === 4) {
+            msToAdd = rand(12, 16) * 24 * 60 * 60 * 1000;
+        } else if (nextStage === 5) {
+            msToAdd = rand(25, 35) * 24 * 60 * 60 * 1000;
+        } else if (nextStage === 6) {
+            msToAdd = rand(150, 200) * 24 * 60 * 60 * 1000;
+        } else {
+            // Falls aus irgendeinem Grund Stufe 1 bei 'correct' bleibt (sollte nicht sein)
+            return { stage: 1, dueDate: 0 };
+        }
+
+        return { stage: nextStage, dueDate: Date.now() + msToAdd };
     }
 
     function speak(text) {
         const ut = new SpeechSynthesisUtterance(text.split('/')[0]);
-        ut.lang = 'sv-SE';
-        ut.rate = 0.9;
+        ut.lang = 'sv-SE'; ut.rate = 0.9;
         window.speechSynthesis.speak(ut);
     }
 
@@ -131,11 +156,12 @@
         document.getElementById('user-input').value = ""; 
         document.getElementById('feedback-area').innerText = "";
 
+        // Wählt eine zufällige Vokabel aus allen aktuell fälligen (inkl. Fehlerwiederholungen)
         currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
         if (currentItem) {
             document.getElementById('display-prompt').innerText = currentItem.termSource;
             document.getElementById('display-badges').innerHTML = renderBadges(currentItem.tags);
-            document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE");
+            document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
         } else {
             document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Vokabeln hinzufügen!";
             document.getElementById('display-badges').innerHTML = "";
@@ -149,6 +175,7 @@
         const targets = currentItem.termTarget.split('/').map(t => t.trim().toLowerCase());
         const isCorrect = targets.includes(input);
         
+        // Update in der DB abwarten, bevor neu gezählt wird
         await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect) });
         
         if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
@@ -159,7 +186,7 @@
             ? `<span style="color: green;">Richtig!</span><br><small>Lösung: ${currentItem.termTarget}</small>`
             : `<span style="color: red;">Leider falsch.</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
         
-        setTimeout(loadNextItem, 2500); // Etwas längere Zeit, um die Lösung lesen zu können
+        setTimeout(loadNextItem, 2500);
     }
 
     async function addVocab(data = null) {
@@ -167,7 +194,7 @@
         const de = data ? data.de : document.getElementById('input-de').value.trim();
         const tags = data ? data.tags : document.getElementById('input-tags').value.trim();
         if (!sv || !de) return;
-        const srs = { stage: 1, dueDate: 0 };
+        const srs = { stage: 1, dueDate: 0 }; // Neue Vokabeln: Due 0 = Sofort fällig
         await db.items.add({ termSource: de, termTarget: sv, direction: 'de-sv', tags, srs });
         await db.items.add({ termSource: sv, termTarget: de, direction: 'sv-de', tags, srs });
         if (!data) { document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = ""; document.getElementById('input-tags').value = ""; }
@@ -223,7 +250,6 @@
     async function exportData() { const items = await db.items.toArray(); const blob = new Blob([JSON.stringify(items)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup.json'; a.click(); }
     async function importData(e) { const reader = new FileReader(); reader.onload = async (event) => { const data = JSON.parse(event.target.result); await db.items.bulkAdd(data); renderList(); loadNextItem(); }; reader.readAsText(e.target.files[0]); }
     function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
-    
     function toggleView() { 
         const isHidden = document.getElementById('add-view').classList.toggle('hidden'); 
         document.getElementById('learn-view').classList.toggle('hidden'); 
@@ -231,7 +257,6 @@
         document.getElementById('viewBtn').innerText = isHidden ? "Vokabeln verwalten" : "Vokabeln abfragen";
         renderList(); 
     }
-
     loadNextItem();
 </script>
 </body>

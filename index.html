@@ -50,7 +50,7 @@
             <div class="word-prompt" id="display-prompt">Bitte Vokabeln hinzufügen!</div>
             <div id="display-badges" class="badge-container"></div>
             <div id="display-sentence" style="font-style: italic; color: #666; margin-top: 10px;"></div>
-            <div id="feedback-area" style="margin-top: 10px; font-weight: bold;"></div>
+            <div id="feedback-area" style="margin-top: 15px; font-weight: bold; min-height: 1.5em;"></div>
         </div>
     </div>
 
@@ -128,7 +128,6 @@
         const allCount = await db.items.count();
         document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
         
-        // Eingabefeld und Feedback leeren
         document.getElementById('user-input').value = ""; 
         document.getElementById('feedback-area').innerText = "";
 
@@ -152,15 +151,15 @@
         
         await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect) });
         
-        // Sprachausgabe bei korrekter Richtung
         if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
         else speak(currentItem.termSource);
 
         const feedback = document.getElementById('feedback-area');
-        feedback.innerText = isCorrect ? "Richtig!" : `Falsch: ${currentItem.termTarget}`;
-        feedback.style.color = isCorrect ? "green" : "red";
+        feedback.innerHTML = isCorrect 
+            ? `<span style="color: green;">Richtig!</span><br><small>Lösung: ${currentItem.termTarget}</small>`
+            : `<span style="color: red;">Leider falsch.</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
         
-        setTimeout(loadNextItem, 1500);
+        setTimeout(loadNextItem, 2500); // Etwas längere Zeit, um die Lösung lesen zu können
     }
 
     async function addVocab(data = null) {
@@ -229,8 +228,6 @@
         const isHidden = document.getElementById('add-view').classList.toggle('hidden'); 
         document.getElementById('learn-view').classList.toggle('hidden'); 
         document.getElementById('input-controls').classList.toggle('hidden'); 
-        
-        // Button-Text dynamisch anpassen
         document.getElementById('viewBtn').innerText = isHidden ? "Vokabeln verwalten" : "Vokabeln abfragen";
         renderList(); 
     }

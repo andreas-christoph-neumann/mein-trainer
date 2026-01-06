@@ -12,23 +12,27 @@
         #app { flex: 1; display: flex; flex-direction: column; padding: 1rem; overflow-y: auto; }
         .card { background: white; padding: 1.5rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 1rem; }
         .word-prompt { font-size: 1.8rem; font-weight: bold; color: #333; margin-bottom: 5px; }
-        .sentence-hint { font-size: 1rem; color: #666; font-style: italic; min-height: 1.2rem; margin-top: 5px; }
         .badge-container { display: flex; justify-content: center; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
         .badge { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; color: white; font-weight: bold; text-transform: uppercase; }
         .bg-grammar { background-color: var(--grammar); }
         .bg-style { background-color: var(--style); }
         .controls { padding: 1rem; background: white; border-top: 1px solid #ddd; }
         .helper-bar { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px; }
-        .helper-btn { padding: 10px 15px; font-size: 1.2rem; border: 1px solid #ccc; border-radius: 5px; background: #eee; }
-        input { width: 100%; padding: 12px; font-size: 1rem; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        .action-btn { width: 100%; padding: 15px; margin-top: 10px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; }
+        .helper-btn { padding: 8px 12px; font-size: 1rem; border: 1px solid #ccc; border-radius: 5px; background: #eee; }
+        input { width: 100%; padding: 10px; font-size: 1rem; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; margin-bottom: 5px; }
+        .action-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; }
         .hidden { display: none; }
-        .feedback { margin-top: 10px; font-weight: bold; text-align: center; }
-        #vocab-list div { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
-        .edit-btn { background: var(--accent); color: #333; border: none; padding: 5px 8px; border-radius: 3px; font-size: 0.8rem; margin-right: 5px; cursor: pointer; display: inline-flex; align-items: center; }
-        .delete-btn { background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 3px; font-size: 0.8rem; cursor: pointer; }
-        .backup-bar { display: flex; gap: 10px; margin-top: 20px; border-top: 2px solid #ddd; padding-top: 15px; }
-        .backup-btn { flex: 1; padding: 10px; font-size: 0.9rem; border-radius: 5px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+        #vocab-list .vocab-item { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
+        
+        /* Inline Edit & Search Styles */
+        .search-box { margin-bottom: 15px; border-color: var(--primary); }
+        .inline-edit-box { display: flex; flex-direction: column; gap: 5px; background: #fffde7; padding: 10px; border: 1px solid var(--accent); border-radius: 8px; }
+        .inline-edit-box input { font-size: 0.9rem; padding: 6px; }
+        .inline-btn-group { display: flex; gap: 5px; }
+        .inline-btn { flex: 1; padding: 8px; border-radius: 5px; border: none; font-size: 0.8rem; cursor: pointer; }
+        .save-btn { background: #4caf50; color: white; }
+        .cancel-btn { background: #9e9e9e; color: white; }
+        .list-btn { background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 5px; }
     </style>
 </head>
 <body>
@@ -36,7 +40,7 @@
 <header>
     <div>
         <span id="stats">Lädt...</span>
-        <button onclick="forceUpdate()" style="background: #ff4444; color: white; border: none; padding: 5px 8px; border-radius: 5px; font-size: 0.7rem; margin-left: 10px;">Reset</button>
+        <button onclick="location.reload(true)" style="background: #ff4444; color: white; border: none; padding: 5px 8px; border-radius: 5px; font-size: 0.7rem; margin-left: 10px;">Reset</button>
     </div>
     <button onclick="toggleView()" id="viewBtn">Vokabeln verwalten</button>
 </header>
@@ -44,32 +48,29 @@
 <div id="app">
     <div id="learn-view">
         <div class="card">
-            <div id="direction-label" style="font-size: 0.9rem; color: var(--primary); margin-bottom: 8px; display: flex; align-items: center; justify-content: center;"></div>
+            <div id="direction-label" style="font-size: 0.9rem; color: var(--primary); margin-bottom: 8px;"></div>
             <div class="word-prompt" id="display-prompt">Bitte Vokabeln hinzufügen!</div>
             <div id="display-badges" class="badge-container"></div>
-            <div class="sentence-hint" id="display-sentence"></div>
-            <div id="feedback-area" class="feedback"></div>
+            <div id="display-sentence" style="font-style: italic; color: #666; margin-top: 10px;"></div>
+            <div id="feedback-area" style="margin-top: 10px; font-weight: bold;"></div>
         </div>
     </div>
 
     <div id="add-view" class="hidden">
-        <h3 id="form-title">Neue Vokabel hinzufügen</h3>
-        <input type="text" id="input-sv" placeholder="Schwedisches Wort" autocapitalize="sentences">
-        <input type="text" id="input-sent-sv" placeholder="Schwedischer Beispielsatz (optional)" style="margin-top:5px; font-size: 0.9rem;" autocapitalize="sentences">
-        <input type="text" id="input-de" placeholder="Deutsch (Synonyme mit / trennen)" style="margin-top:15px" autocapitalize="sentences">
-        <input type="text" id="input-sent-de" placeholder="Deutscher Beispielsatz (optional)" style="margin-top:5px; font-size: 0.9rem;" autocapitalize="sentences">
-        <input type="text" id="input-tags" placeholder="Zusatzinfo (z.B. 3. Deklination, ugs.)" style="margin-top:15px; border-color: var(--grammar);" autocapitalize="none">
-        
-        <button class="action-btn" id="save-vocab-btn" onclick="addVocab()">Speichern (Beide Richtungen)</button>
-        <button class="action-btn hidden" id="cancel-edit-btn" onclick="resetForm()" style="background: #888; margin-top: 5px;">Abbrechen</button>
-        
-        <div class="backup-bar">
-            <button class="backup-btn" onclick="exportData()">Backup Export (JSON)</button>
-            <button class="backup-btn" onclick="document.getElementById('importFile').click()">Import (JSON)</button>
+        <h3>Neue Vokabel hinzufügen</h3>
+        <input type="text" id="input-sv" placeholder="Schwedisch">
+        <input type="text" id="input-de" placeholder="Deutsch">
+        <input type="text" id="input-tags" placeholder="Zusatzinfo (Komma getrennt)">
+        <button class="action-btn" onclick="addVocab()">Speichern</button>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="exportData()">Export</button>
+            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="document.getElementById('importFile').click()">Import</button>
             <input type="file" id="importFile" class="hidden" accept=".json" onchange="importData(event)">
         </div>
 
-        <h3 style="margin-top:25px">Alle Vokabeln</h3>
+        <h3 style="margin-top:25px">Liste filtern</h3>
+        <input type="text" id="search-input" class="search-box" placeholder="Suchen nach Wort oder Tag..." oninput="renderList()">
         <div id="vocab-list"></div>
     </div>
 </div>
@@ -80,79 +81,55 @@
         <button class="helper-btn" onclick="addChar('ä')">ä</button>
         <button class="helper-btn" onclick="addChar('ö')">ö</button>
     </div>
-    <input type="text" id="user-input" placeholder="Antwort tippen..." autocomplete="off" autocapitalize="sentences">
+    <input type="text" id="user-input" placeholder="Antwort..." autocomplete="off">
     <button class="action-btn" id="check-btn" onclick="checkAnswer()">Prüfen</button>
 </div>
 
 <script>
     const db = new Dexie('VocabTrainerDB');
-    db.version(1).stores({ items: '++id, deckId, termSource, termTarget, direction, srs.dueDate' });
+    db.version(1).stores({ items: '++id, termSource, termTarget, direction, tags, srs.dueDate' });
 
     let currentItem = null;
-    let editingId = null;
+    let inlineEditingId = null;
 
-    function calculateSRS(item, quality) {
+    function calculateSRS(item, correct) {
         let stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
-        stage = (quality >= 3) ? Math.min(6, stage + 1) : 1;
+        stage = correct ? Math.min(6, stage + 1) : 1;
         const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-        let days;
-        switch (stage) {
-            case 1: days = 1; break;
-            case 2: days = 2; break;
-            case 3: days = rand(6, 8); break;
-            case 4: days = rand(12, 16); break;
-            case 5: days = rand(25, 35); break;
-            case 6: days = rand(150, 200); break;
-            default: days = 1;
-        }
+        let days = stage === 1 ? 1 : stage === 2 ? 2 : stage === 3 ? rand(6, 8) : stage === 4 ? rand(12, 16) : stage === 5 ? rand(25, 35) : rand(150, 200);
         return { stage, dueDate: Date.now() + (days * 24 * 60 * 60 * 1000) };
-    }
-
-    function speak(text) {
-        const ut = new SpeechSynthesisUtterance(text.split('/')[0]);
-        ut.lang = 'sv-SE'; ut.rate = 0.9;
-        window.speechSynthesis.speak(ut);
-    }
-
-    function renderBadges(tagsString) {
-        if (!tagsString) return "";
-        const styleKeywords = ['ugs.', 'formell', 'slang', 'fam.', 'poet.', 'arch.', 'lit.'];
-        return tagsString.split(',').map(tag => {
-            const t = tag.trim(); if (!t) return "";
-            const isStyle = styleKeywords.some(k => t.toLowerCase().includes(k));
-            return `<span class="badge ${isStyle ? 'bg-style' : 'bg-grammar'}">${t}</span>`;
-        }).join('');
     }
 
     function getProgressIcon(stage = 1) {
         const colors = ['#ff4444', '#ffbb33', '#ffeb3b', '#90EE90', '#006400'];
-        let svg = `<svg width="14" height="8" viewBox="0 0 7 4" style="vertical-align: middle; margin-right: 6px; shape-rendering: crispEdges;">`;
+        let svg = `<svg width="14" height="8" viewBox="0 0 7 4" style="vertical-align: middle; margin-right: 6px;">`;
         for (let i = 0; i < 5; i++) {
-            const color = (stage > i + 1) ? colors[i] : '#ccc';
-            const h = (i + 1) * 0.8;
-            svg += `<rect x="${i * 1.4}" y="${4 - h}" width="0.8" height="${h}" fill="${color}" />`;
+            svg += `<rect x="${i * 1.4}" y="${4 - (i + 1) * 0.8}" width="0.8" height="${(i + 1) * 0.8}" fill="${stage > i + 1 ? colors[i] : '#ccc'}" />`;
         }
         return svg + `</svg>`;
+    }
+
+    function renderBadges(tags) {
+        if (!tags) return "";
+        const styleKeys = ['ugs.', 'formell', 'slang'];
+        return tags.split(',').map(t => {
+            const isStyle = styleKeys.some(k => t.trim().toLowerCase().includes(k));
+            return `<span class="badge ${isStyle ? 'bg-style' : 'bg-grammar'}">${t.trim()}</span>`;
+        }).join('');
     }
 
     async function loadNextItem() {
         const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
         const allCount = await db.items.count();
         document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
-        if (allCount === 0) { document.getElementById('display-prompt').innerText = "Vokabeln hinzufügen!"; return; }
         currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
         if (currentItem) {
             document.getElementById('display-prompt').innerText = currentItem.termSource;
-            document.getElementById('display-sentence').innerText = currentItem.sentenceSource || "";
             document.getElementById('display-badges').innerHTML = renderBadges(currentItem.tags);
-            const currentStage = (currentItem.srs && currentItem.srs.stage) ? currentItem.srs.stage : 1;
-            document.getElementById('direction-label').innerHTML = getProgressIcon(currentStage) + "<span>" + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE") + "</span>";
+            document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE");
         } else {
-            document.getElementById('display-prompt').innerText = "Alles erledigt! 🎉";
-            document.getElementById('display-sentence').innerText = ""; document.getElementById('display-badges').innerHTML = "";
-            document.getElementById('direction-label').innerHTML = "";
+            document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Vokabeln hinzufügen!";
         }
-        document.getElementById('user-input').value = ""; document.getElementById('feedback-area').innerText = "";
     }
 
     async function checkAnswer() {
@@ -160,115 +137,74 @@
         const input = document.getElementById('user-input').value.trim().toLowerCase();
         const targets = currentItem.termTarget.split('/').map(t => t.trim().toLowerCase());
         const isCorrect = targets.includes(input);
-        await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect ? 5 : 0) });
-        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
-        const feedback = document.getElementById('feedback-area');
-        feedback.innerText = isCorrect ? `Richtig! (${currentItem.termTarget})` : `Falsch. Lösung: ${currentItem.termTarget}`;
-        feedback.style.color = isCorrect ? "green" : "red";
-        document.getElementById('check-btn').disabled = true;
-        setTimeout(() => { document.getElementById('check-btn').disabled = false; loadNextItem(); }, 2000);
+        await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect) });
+        document.getElementById('feedback-area').innerText = isCorrect ? "Richtig!" : `Falsch: ${currentItem.termTarget}`;
+        document.getElementById('feedback-area').style.color = isCorrect ? "green" : "red";
+        setTimeout(loadNextItem, 1500);
     }
 
-    async function addVocab(customData = null) {
-        const sv = customData ? customData.sv : document.getElementById('input-sv').value.trim();
-        const de = customData ? customData.de : document.getElementById('input-de').value.trim();
-        const tags = customData ? customData.tags : document.getElementById('input-tags').value.trim();
-        if (!de || !sv) return;
-        
-        if (editingId && !customData) {
-            const isDeSv = document.getElementById('form-title').innerText.includes("DE-SV");
-            await db.items.update(editingId, { termSource: isDeSv ? de : sv, termTarget: isDeSv ? sv : de, tags: tags });
-            resetForm();
-        } else {
-            const srsInit = () => ({ stage: 1, dueDate: 0 });
-            await db.items.add({ deckId: 1, termSource: de, termTarget: sv, direction: 'de-sv', tags: tags, srs: srsInit() });
-            await db.items.add({ deckId: 1, termSource: sv, termTarget: de, direction: 'sv-de', tags: tags, srs: srsInit() });
-            if(!customData) resetForm();
-        }
+    async function addVocab(data = null) {
+        const sv = data ? data.sv : document.getElementById('input-sv').value.trim();
+        const de = data ? data.de : document.getElementById('input-de').value.trim();
+        const tags = data ? data.tags : document.getElementById('input-tags').value.trim();
+        if (!sv || !de) return;
+        const srs = { stage: 1, dueDate: 0 };
+        await db.items.add({ termSource: de, termTarget: sv, direction: 'de-sv', tags, srs });
+        await db.items.add({ termSource: sv, termTarget: de, direction: 'sv-de', tags, srs });
+        if (!data) { document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = ""; document.getElementById('input-tags').value = ""; }
         renderList(); loadNextItem();
     }
 
-    async function exportData() {
-        const items = await db.items.toArray();
-        const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = 'svenska_backup.json'; a.click();
-    }
-
-    async function importData(event) {
-        const file = event.target.files[0]; if (!file) return;
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            try {
-                const data = JSON.parse(e.target.result);
-                if (Array.isArray(data)) {
-                    for (const entry of data) {
-                        // Lösche die ID aus der Datei, damit die Datenbank neue IDs vergibt
-                        delete entry.id; 
-                        
-                        if (entry.sv && entry.de) {
-                            // Format aus Lektions-Snippets
-                            await addVocab(entry);
-                        } else if (entry.termSource && entry.termTarget) {
-                            // Format aus dem Backup-Export
-                            await db.items.add(entry);
-                        }
-                    }
-                    alert("Import erfolgreich!"); 
-                    renderList(); 
-                    loadNextItem();
-                }
-            } catch (err) { alert("Fehler beim Import: " + err.message); }
-        };
-        reader.readAsText(file);
-    }
-
-    async function editVocab(id) {
-        const item = await db.items.get(id); if (!item) return;
-        editingId = id; const isDeSv = item.direction === 'de-sv';
-        document.getElementById('input-sv').value = isDeSv ? item.termTarget : item.termSource;
-        document.getElementById('input-de').value = isDeSv ? item.termSource : item.termTarget;
-        document.getElementById('input-tags').value = item.tags || "";
-        document.getElementById('form-title').innerText = `Vokabel editieren (${item.direction.toUpperCase()})`;
-        document.getElementById('save-vocab-btn').innerText = "Änderungen speichern";
-        document.getElementById('cancel-edit-btn').classList.remove('hidden');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    function resetForm() {
-        editingId = null; document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = "";
-        document.getElementById('input-tags').value = ""; document.getElementById('form-title').innerText = "Neue Vokabel hinzufügen";
-        document.getElementById('save-vocab-btn').innerText = "Speichern (Beide Richtungen)";
-        document.getElementById('cancel-edit-btn').classList.add('hidden');
-    }
-
     async function renderList() {
-        const items = await db.items.toArray();
-        document.getElementById('vocab-list').innerHTML = items.map(i => `
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div>
-                    <div style="display: flex; align-items: baseline; line-height: 1.2; flex-wrap: wrap; gap: 4px;">
-                        ${getProgressIcon(i.srs.stage || 1)} <strong>${i.termSource}</strong> - ${i.termTarget} ${renderBadges(i.tags)}
+        const query = document.getElementById('search-input').value.toLowerCase();
+        let items = await db.items.toArray();
+        if (query) {
+            items = items.filter(i => i.termSource.toLowerCase().includes(query) || i.termTarget.toLowerCase().includes(query) || (i.tags && i.tags.toLowerCase().includes(query)));
+        }
+        const container = document.getElementById('vocab-list');
+        container.innerHTML = items.map(i => {
+            if (inlineEditingId === i.id) {
+                return `
+                <div class="vocab-item inline-edit-box">
+                    <input type="text" id="edit-src-${i.id}" value="${i.termSource}">
+                    <input type="text" id="edit-trg-${i.id}" value="${i.termTarget}">
+                    <input type="text" id="edit-tags-${i.id}" value="${i.tags || ''}">
+                    <div class="inline-btn-group">
+                        <button class="inline-btn save-btn" onclick="saveInline(${i.id})">Speichern</button>
+                        <button class="inline-btn cancel-btn" onclick="cancelInline()">Abbruch</button>
                     </div>
+                </div>`;
+            }
+            return `
+            <div class="vocab-item" style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div>${getProgressIcon(i.srs.stage)} <strong>${i.termSource}</strong> - ${i.termTarget}</div>
+                    <div style="margin-top:4px;">${renderBadges(i.tags)}</div>
                 </div>
-                <div style="display: flex; gap: 5px;">
-                    <button class="edit-btn" onclick="editVocab(${i.id})">✎</button>
-                    <button class="delete-btn" onclick="deleteVocab(${i.id})">X</button>
+                <div>
+                    <button class="list-btn" onclick="startInline(${i.id})">✎</button>
+                    <button class="list-btn" onclick="deleteVocab(${i.id})" style="color:red;">✕</button>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
+    }
+
+    function startInline(id) { inlineEditingId = id; renderList(); }
+    function cancelInline() { inlineEditingId = null; renderList(); }
+    async function saveInline(id) {
+        const termSource = document.getElementById(`edit-src-${id}`).value.trim();
+        const termTarget = document.getElementById(`edit-trg-${id}`).value.trim();
+        const tags = document.getElementById(`edit-tags-${id}`).value.trim();
+        await db.items.update(id, { termSource, termTarget, tags });
+        inlineEditingId = null;
+        renderList(); loadNextItem();
     }
 
     async function deleteVocab(id) { if (confirm("Löschen?")) { await db.items.delete(id); renderList(); loadNextItem(); } }
+    async function exportData() { const items = await db.items.toArray(); const blob = new Blob([JSON.stringify(items)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup.json'; a.click(); }
+    async function importData(e) { const reader = new FileReader(); reader.onload = async (event) => { const data = JSON.parse(event.target.result); await db.items.bulkAdd(data); renderList(); loadNextItem(); }; reader.readAsText(e.target.files[0]); }
     function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
-    function toggleView() {
-        const isNowHidden = document.getElementById('add-view').classList.toggle('hidden');
-        document.getElementById('learn-view').classList.toggle('hidden', !isNowHidden);
-        document.getElementById('input-controls').classList.toggle('hidden', !isNowHidden);
-        document.getElementById('viewBtn').innerText = isNowHidden ? "Vokabeln verwalten" : "Zum Lernen";
-        if (!isNowHidden) { resetForm(); renderList(); }
-    }
-    async function forceUpdate() { location.reload(true); }
+    function toggleView() { document.getElementById('add-view').classList.toggle('hidden'); document.getElementById('learn-view').classList.toggle('hidden'); document.getElementById('input-controls').classList.toggle('hidden'); renderList(); }
     loadNextItem();
 </script>
 </body>

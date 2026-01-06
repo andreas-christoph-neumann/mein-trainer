@@ -23,8 +23,6 @@
         .action-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; }
         .hidden { display: none; }
         #vocab-list .vocab-item { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
-        
-        /* Inline Edit & Search Styles */
         .search-box { margin-bottom: 15px; border-color: var(--primary); }
         .inline-edit-box { display: flex; flex-direction: column; gap: 5px; background: #fffde7; padding: 10px; border: 1px solid var(--accent); border-radius: 8px; }
         .inline-edit-box input { font-size: 0.9rem; padding: 6px; }
@@ -100,6 +98,13 @@
         return { stage, dueDate: Date.now() + (days * 24 * 60 * 60 * 1000) };
     }
 
+    function speak(text) {
+        const ut = new SpeechSynthesisUtterance(text.split('/')[0]);
+        ut.lang = 'sv-SE';
+        ut.rate = 0.9;
+        window.speechSynthesis.speak(ut);
+    }
+
     function getProgressIcon(stage = 1) {
         const colors = ['#ff4444', '#ffbb33', '#ffeb3b', '#90EE90', '#006400'];
         let svg = `<svg width="14" height="8" viewBox="0 0 7 4" style="vertical-align: middle; margin-right: 6px;">`;
@@ -122,6 +127,11 @@
         const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
         const allCount = await db.items.count();
         document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
+        
+        // Eingabefeld und Feedback leeren
+        document.getElementById('user-input').value = ""; 
+        document.getElementById('feedback-area').innerText = "";
+
         currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
         if (currentItem) {
             document.getElementById('display-prompt').innerText = currentItem.termSource;
@@ -129,6 +139,8 @@
             document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? "DE ➔ SV" : "SV ➔ DE");
         } else {
             document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Vokabeln hinzufügen!";
+            document.getElementById('display-badges').innerHTML = "";
+            document.getElementById('direction-label').innerHTML = "";
         }
     }
 
@@ -137,9 +149,17 @@
         const input = document.getElementById('user-input').value.trim().toLowerCase();
         const targets = currentItem.termTarget.split('/').map(t => t.trim().toLowerCase());
         const isCorrect = targets.includes(input);
+        
         await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect) });
-        document.getElementById('feedback-area').innerText = isCorrect ? "Richtig!" : `Falsch: ${currentItem.termTarget}`;
-        document.getElementById('feedback-area').style.color = isCorrect ? "green" : "red";
+        
+        // Sprachausgabe bei korrekter Richtung
+        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
+        else speak(currentItem.termSource);
+
+        const feedback = document.getElementById('feedback-area');
+        feedback.innerText = isCorrect ? "Richtig!" : `Falsch: ${currentItem.termTarget}`;
+        feedback.style.color = isCorrect ? "green" : "red";
+        
         setTimeout(loadNextItem, 1500);
     }
 
@@ -204,7 +224,17 @@
     async function exportData() { const items = await db.items.toArray(); const blob = new Blob([JSON.stringify(items)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup.json'; a.click(); }
     async function importData(e) { const reader = new FileReader(); reader.onload = async (event) => { const data = JSON.parse(event.target.result); await db.items.bulkAdd(data); renderList(); loadNextItem(); }; reader.readAsText(e.target.files[0]); }
     function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
-    function toggleView() { document.getElementById('add-view').classList.toggle('hidden'); document.getElementById('learn-view').classList.toggle('hidden'); document.getElementById('input-controls').classList.toggle('hidden'); renderList(); }
+    
+    function toggleView() { 
+        const isHidden = document.getElementById('add-view').classList.toggle('hidden'); 
+        document.getElementById('learn-view').classList.toggle('hidden'); 
+        document.getElementById('input-controls').classList.toggle('hidden'); 
+        
+        // Button-Text dynamisch anpassen
+        document.getElementById('viewBtn').innerText = isHidden ? "Vokabeln verwalten" : "Vokabeln abfragen";
+        renderList(); 
+    }
+
     loadNextItem();
 </script>
 </body>

@@ -11,7 +11,7 @@
         header { background: var(--primary); color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center; }
         #app { flex: 1; display: flex; flex-direction: column; padding: 1rem; overflow-y: auto; }
         .card { background: white; padding: 1.5rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 1rem; }
-        .word-prompt { font-size: 1.8rem; font-weight: bold; color: #333; margin-bottom: 5px; }
+        .word-prompt { font-size: 1.8rem; font-weight: bold; color: #333; margin-bottom: 5px; line-height: 1.2; word-break: break-word; }
         .badge-container { display: flex; justify-content: center; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
         .badge { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; color: white; font-weight: bold; text-transform: uppercase; }
         .bg-grammar { background-color: var(--grammar); }
@@ -94,9 +94,7 @@
     function calculateSRS(item, correct) {
         let currentStage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
         const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-
         if (!correct) return { stage: 1, dueDate: 0 };
-
         let nextStage = Math.min(6, currentStage + 1);
         let msToAdd = 0;
         if (nextStage === 2) msToAdd = rand(20, 50) * 60 * 60 * 1000;
@@ -104,7 +102,6 @@
         else if (nextStage === 4) msToAdd = rand(12, 16) * 24 * 60 * 60 * 1000;
         else if (nextStage === 5) msToAdd = rand(25, 35) * 24 * 60 * 60 * 1000;
         else if (nextStage === 6) msToAdd = rand(150, 200) * 24 * 60 * 60 * 1000;
-
         return { stage: nextStage, dueDate: Date.now() + msToAdd };
     }
 
@@ -133,7 +130,6 @@
     }
 
     async function loadNextItem() {
-        // UI Reset
         document.getElementById('check-btn').classList.remove('hidden');
         document.getElementById('next-btn').classList.add('hidden');
         document.getElementById('check-btn').disabled = false;
@@ -145,12 +141,22 @@
         document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
         
         currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
+        const promptEl = document.getElementById('display-prompt');
+
         if (currentItem) {
-            document.getElementById('display-prompt').innerText = currentItem.termSource;
+            const text = currentItem.termSource;
+            promptEl.innerText = text;
+            
+            // Dynamische Schriftgröße basierend auf Länge
+            if (text.length > 25) promptEl.style.fontSize = "1.1rem";
+            else if (text.length > 15) promptEl.style.fontSize = "1.4rem";
+            else promptEl.style.fontSize = "1.8rem";
+
             document.getElementById('display-badges').innerHTML = renderBadges(currentItem.tags);
             document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
         } else {
-            document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Vokabeln hinzufügen!";
+            promptEl.innerText = allCount > 0 ? "Pause! 🎉" : "Vokabeln hinzufügen!";
+            promptEl.style.fontSize = "1.8rem";
             document.getElementById('display-badges').innerHTML = "";
             document.getElementById('direction-label').innerHTML = "";
         }
@@ -173,11 +179,9 @@
             : `<span style="color: red;">Leider falsch.</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
         
         if (isCorrect) {
-            // Bei Richtig: Automatischer Wechsel
             document.getElementById('check-btn').disabled = true;
             setTimeout(loadNextItem, 2500);
         } else {
-            // Bei Falsch: "Weiter"-Button einblenden
             document.getElementById('check-btn').classList.add('hidden');
             document.getElementById('next-btn').classList.remove('hidden');
         }

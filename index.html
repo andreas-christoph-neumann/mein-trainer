@@ -23,6 +23,12 @@
         .action-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; }
         .next-btn { background: #4caf50; margin-top: 0; }
         .hidden { display: none; }
+        
+        /* Fehler-Highlighting Styles */
+        .err-char { color: #ff4444; text-decoration: underline; font-weight: bold; }
+        .err-missing { color: #ff4444; font-weight: bold; display: inline-block; padding: 0 1px; }
+        .err-extra { color: #ff4444; text-decoration: line-through; opacity: 0.7; }
+
         #vocab-list .vocab-item { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
         .search-box { margin-bottom: 15px; border-color: var(--primary); }
         .inline-edit-box { display: flex; flex-direction: column; gap: 5px; background: #fffde7; padding: 10px; border: 1px solid var(--accent); border-radius: 8px; }
@@ -50,7 +56,7 @@
             <div id="direction-label" style="font-size: 0.9rem; color: var(--primary); margin-bottom: 8px;"></div>
             <div class="word-prompt" id="display-prompt">Bitte Vokabeln hinzufügen!</div>
             <div id="display-badges" class="badge-container"></div>
-            <div id="feedback-area" style="margin-top: 15px; font-weight: bold; min-height: 1.5em;"></div>
+            <div id="feedback-area" style="margin-top: 15px; font-weight: bold; min-height: 1.5em; line-height: 1.6;"></div>
         </div>
     </div>
 
@@ -111,6 +117,54 @@
         window.speechSynthesis.speak(ut);
     }
 
+    // Hilfsfunktion für den Vergleich (Levenshtein-basiert für Diff-Anzeige)
+    function getDiffHtml(input, target) {
+        let result = "";
+        let i = 0, j = 0;
+        const s1 = input.toLowerCase();
+        const s2 = target.toLowerCase();
+
+        while (i < s1.length || j < s2.length) {
+            if (i < s1.length && j < s2.length && s1[i] === s2[j]) {
+                result += input[i];
+                i++; j++;
+            } else if (i < s1.length && j < s2.length && s1[i] !== s2[j]) {
+                // Prüfen ob es ein Vertauscher oder ein fehlendes Zeichen ist
+                if (s1[i+1] === s2[j]) { // Extra Zeichen in Eingabe
+                    result += `<span class="err-extra">${input[i]}</span>`;
+                    i++;
+                } else if (s1[i] === s2[j+1]) { // Fehlendes Zeichen in Eingabe
+                    result += `<span class="err-missing">|</span>`;
+                    j++;
+                } else { // Falsches Zeichen
+                    result += `<span class="err-char">${input[i]}</span>`;
+                    i++; j++;
+                }
+            } else if (i < s1.length) { // Zu viele Zeichen am Ende
+                result += `<span class="err-extra">${input[i]}</span>`;
+                i++;
+            } else if (j < s2.length) { // Fehlende Zeichen am Ende
+                result += `<span class="err-missing">|</span>`;
+                j++;
+            }
+        }
+        return result;
+    }
+
+    // Einfache Distanz-Berechnung um bei Synonymen das "ähnlichste" Wort zu finden
+    function getLevenshtein(a, b) {
+        const matrix = Array.from({ length: a.length + 1 }, () => []);
+        for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+        for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+        for (let i = 1; i <= a.length; i++) {
+            for (let j = 1; j <= b.length; j++) {
+                const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
+            }
+        }
+        return matrix[a.length][b.length];
+    }
+
     function getProgressIcon(stage = 1) {
         const colors = ['#ff4444', '#ffbb33', '#ffeb3b', '#90EE90', '#006400'];
         let svg = `<svg width="14" height="8" viewBox="0 0 7 4" style="vertical-align: middle; margin-right: 6px;">`;
@@ -146,12 +200,9 @@
         if (currentItem) {
             const text = currentItem.termSource;
             promptEl.innerText = text;
-            
-            // Dynamische Schriftgröße basierend auf Länge
             if (text.length > 25) promptEl.style.fontSize = "1.1rem";
             else if (text.length > 15) promptEl.style.fontSize = "1.4rem";
             else promptEl.style.fontSize = "1.8rem";
-
             document.getElementById('display-badges').innerHTML = renderBadges(currentItem.tags);
             document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
         } else {
@@ -164,9 +215,9 @@
 
     async function checkAnswer() {
         if (!currentItem) return;
-        const input = document.getElementById('user-input').value.trim().toLowerCase();
-        const targets = currentItem.termTarget.split('/').map(t => t.trim().toLowerCase());
-        const isCorrect = targets.includes(input);
+        const input = document.getElementById('user-input').value.trim();
+        const targets = currentItem.termTarget.split('/').map(t => t.trim());
+        const isCorrect = targets.some(t => t.toLowerCase() === input.toLowerCase());
         
         await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect) });
         
@@ -174,14 +225,25 @@
         else speak(currentItem.termSource);
 
         const feedback = document.getElementById('feedback-area');
-        feedback.innerHTML = isCorrect 
-            ? `<span style="color: green;">Richtig!</span><br><small>Lösung: ${currentItem.termTarget}</small>`
-            : `<span style="color: red;">Leider falsch.</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
         
         if (isCorrect) {
+            feedback.innerHTML = `<span style="color: green;">Richtig!</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
             document.getElementById('check-btn').disabled = true;
             setTimeout(loadNextItem, 2500);
         } else {
+            // Finde das ähnlichste Synonym für den Diff
+            let bestMatch = targets[0];
+            let minScore = getLevenshtein(input.toLowerCase(), bestMatch.toLowerCase());
+            targets.forEach(t => {
+                let s = getLevenshtein(input.toLowerCase(), t.toLowerCase());
+                if (s < minScore) { minScore = s; bestMatch = t; }
+            });
+
+            const errorAnalysis = getDiffHtml(input, bestMatch);
+            feedback.innerHTML = `<span style="color: red;">Leider falsch.</span><br>
+                                 Deine Eingabe: ${errorAnalysis}<br>
+                                 <small style="color: #666;">Richtige Lösung: ${currentItem.termTarget}</small>`;
+            
             document.getElementById('check-btn').classList.add('hidden');
             document.getElementById('next-btn').classList.remove('hidden');
         }

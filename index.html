@@ -20,7 +20,8 @@
         .helper-bar { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px; }
         .helper-btn { padding: 8px 12px; font-size: 1rem; border: 1px solid #ccc; border-radius: 5px; background: #eee; }
         input { width: 100%; padding: 10px; font-size: 1rem; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; margin-bottom: 5px; }
-        .action-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; }
+        .action-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; }
+        .next-btn { background: #4caf50; margin-top: 0; }
         .hidden { display: none; }
         #vocab-list .vocab-item { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
         .search-box { margin-bottom: 15px; border-color: var(--primary); }
@@ -49,7 +50,6 @@
             <div id="direction-label" style="font-size: 0.9rem; color: var(--primary); margin-bottom: 8px;"></div>
             <div class="word-prompt" id="display-prompt">Bitte Vokabeln hinzufügen!</div>
             <div id="display-badges" class="badge-container"></div>
-            <div id="display-sentence" style="font-style: italic; color: #666; margin-top: 10px;"></div>
             <div id="feedback-area" style="margin-top: 15px; font-weight: bold; min-height: 1.5em;"></div>
         </div>
     </div>
@@ -81,6 +81,7 @@
     </div>
     <input type="text" id="user-input" placeholder="Antwort..." autocomplete="off">
     <button class="action-btn" id="check-btn" onclick="checkAnswer()">Prüfen</button>
+    <button class="action-btn next-btn hidden" id="next-btn" onclick="loadNextItem()">Weiter</button>
 </div>
 
 <script>
@@ -90,36 +91,19 @@
     let currentItem = null;
     let inlineEditingId = null;
 
-    // Angepasste Logik für Abfrageintervalle
     function calculateSRS(item, correct) {
         let currentStage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
         const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-        if (!correct) {
-            // Bei Fehler: Zurück auf Stufe 1 und Fälligkeit auf 0 (bleibt fällig)
-            return { stage: 1, dueDate: 0 };
-        }
+        if (!correct) return { stage: 1, dueDate: 0 };
 
-        // Bei korrekter Antwort: Stufe erhöhen
         let nextStage = Math.min(6, currentStage + 1);
         let msToAdd = 0;
-
-        if (nextStage === 2) {
-            // Stufe 2: 20 bis 50 Stunden
-            msToAdd = rand(20, 50) * 60 * 60 * 1000;
-        } else if (nextStage === 3) {
-            // Stufe 3: 5 bis 10 Tage
-            msToAdd = rand(5, 10) * 24 * 60 * 60 * 1000;
-        } else if (nextStage === 4) {
-            msToAdd = rand(12, 16) * 24 * 60 * 60 * 1000;
-        } else if (nextStage === 5) {
-            msToAdd = rand(25, 35) * 24 * 60 * 60 * 1000;
-        } else if (nextStage === 6) {
-            msToAdd = rand(150, 200) * 24 * 60 * 60 * 1000;
-        } else {
-            // Falls aus irgendeinem Grund Stufe 1 bei 'correct' bleibt (sollte nicht sein)
-            return { stage: 1, dueDate: 0 };
-        }
+        if (nextStage === 2) msToAdd = rand(20, 50) * 60 * 60 * 1000;
+        else if (nextStage === 3) msToAdd = rand(5, 10) * 24 * 60 * 60 * 1000;
+        else if (nextStage === 4) msToAdd = rand(12, 16) * 24 * 60 * 60 * 1000;
+        else if (nextStage === 5) msToAdd = rand(25, 35) * 24 * 60 * 60 * 1000;
+        else if (nextStage === 6) msToAdd = rand(150, 200) * 24 * 60 * 60 * 1000;
 
         return { stage: nextStage, dueDate: Date.now() + msToAdd };
     }
@@ -149,14 +133,17 @@
     }
 
     async function loadNextItem() {
+        // UI Reset
+        document.getElementById('check-btn').classList.remove('hidden');
+        document.getElementById('next-btn').classList.add('hidden');
+        document.getElementById('check-btn').disabled = false;
+        document.getElementById('user-input').value = ""; 
+        document.getElementById('feedback-area').innerText = "";
+
         const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
         const allCount = await db.items.count();
         document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
         
-        document.getElementById('user-input').value = ""; 
-        document.getElementById('feedback-area').innerText = "";
-
-        // Wählt eine zufällige Vokabel aus allen aktuell fälligen (inkl. Fehlerwiederholungen)
         currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
         if (currentItem) {
             document.getElementById('display-prompt').innerText = currentItem.termSource;
@@ -175,7 +162,6 @@
         const targets = currentItem.termTarget.split('/').map(t => t.trim().toLowerCase());
         const isCorrect = targets.includes(input);
         
-        // Update in der DB abwarten, bevor neu gezählt wird
         await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect) });
         
         if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
@@ -186,7 +172,15 @@
             ? `<span style="color: green;">Richtig!</span><br><small>Lösung: ${currentItem.termTarget}</small>`
             : `<span style="color: red;">Leider falsch.</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
         
-        setTimeout(loadNextItem, 2500);
+        if (isCorrect) {
+            // Bei Richtig: Automatischer Wechsel
+            document.getElementById('check-btn').disabled = true;
+            setTimeout(loadNextItem, 2500);
+        } else {
+            // Bei Falsch: "Weiter"-Button einblenden
+            document.getElementById('check-btn').classList.add('hidden');
+            document.getElementById('next-btn').classList.remove('hidden');
+        }
     }
 
     async function addVocab(data = null) {
@@ -194,7 +188,7 @@
         const de = data ? data.de : document.getElementById('input-de').value.trim();
         const tags = data ? data.tags : document.getElementById('input-tags').value.trim();
         if (!sv || !de) return;
-        const srs = { stage: 1, dueDate: 0 }; // Neue Vokabeln: Due 0 = Sofort fällig
+        const srs = { stage: 1, dueDate: 0 };
         await db.items.add({ termSource: de, termTarget: sv, direction: 'de-sv', tags, srs });
         await db.items.add({ termSource: sv, termTarget: de, direction: 'sv-de', tags, srs });
         if (!data) { document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = ""; document.getElementById('input-tags').value = ""; }

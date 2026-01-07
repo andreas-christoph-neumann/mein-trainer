@@ -129,29 +129,27 @@
                 result += input[i];
                 i++; j++;
             } else if (i < s1.length && j < s2.length && s1[i] !== s2[j]) {
-                // Prüfen ob es ein Vertauscher oder ein fehlendes Zeichen ist
-                if (s1[i+1] === s2[j]) { // Extra Zeichen in Eingabe
+                if (s1[i+1] === s2[j]) { 
                     result += `<span class="err-extra">${input[i]}</span>`;
                     i++;
-                } else if (s1[i] === s2[j+1]) { // Fehlendes Zeichen in Eingabe
-                    result += `<span class="err-missing">|</span>`;
+                } else if (s1[i] === s2[j+1]) { 
+                    result += `<span class="err-missing">_</span>`;
                     j++;
-                } else { // Falsches Zeichen
+                } else { 
                     result += `<span class="err-char">${input[i]}</span>`;
                     i++; j++;
                 }
-            } else if (i < s1.length) { // Zu viele Zeichen am Ende
+            } else if (i < s1.length) { 
                 result += `<span class="err-extra">${input[i]}</span>`;
                 i++;
-            } else if (j < s2.length) { // Fehlende Zeichen am Ende
-                result += `<span class="err-missing">|</span>`;
+            } else if (j < s2.length) { 
+                result += `<span class="err-missing">_</span>`;
                 j++;
             }
         }
         return result;
     }
 
-    // Einfache Distanz-Berechnung um bei Synonymen das "ähnlichste" Wort zu finden
     function getLevenshtein(a, b) {
         const matrix = Array.from({ length: a.length + 1 }, () => []);
         for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
@@ -231,7 +229,6 @@
             document.getElementById('check-btn').disabled = true;
             setTimeout(loadNextItem, 2500);
         } else {
-            // Finde das ähnlichste Synonym für den Diff
             let bestMatch = targets[0];
             let minScore = getLevenshtein(input.toLowerCase(), bestMatch.toLowerCase());
             targets.forEach(t => {

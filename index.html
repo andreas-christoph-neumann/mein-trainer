@@ -45,7 +45,7 @@
 <header>
     <div>
         <span id="stats">Lädt...</span>
-        <button onclick="location.reload(true)" style="background: #ff4444; color: white; border: none; padding: 5px 8px; border-radius: 5px; font-size: 0.7rem; margin-left: 10px;">Reset</button>
+        <button onclick="clearDatabase()" style="background: #ff4444; color: white; border: none; padding: 5px 8px; border-radius: 5px; font-size: 0.7rem; margin-left: 10px;">Daten löschen</button>
     </div>
     <button onclick="toggleView()" id="viewBtn">Vokabeln verwalten</button>
 </header>
@@ -117,35 +117,17 @@
         window.speechSynthesis.speak(ut);
     }
 
-    // Hilfsfunktion für den Vergleich (Levenshtein-basiert für Diff-Anzeige)
     function getDiffHtml(input, target) {
-        let result = "";
-        let i = 0, j = 0;
-        const s1 = input.toLowerCase();
-        const s2 = target.toLowerCase();
-
+        let result = ""; let i = 0, j = 0;
+        const s1 = input.toLowerCase(); const s2 = target.toLowerCase();
         while (i < s1.length || j < s2.length) {
-            if (i < s1.length && j < s2.length && s1[i] === s2[j]) {
-                result += input[i];
-                i++; j++;
-            } else if (i < s1.length && j < s2.length && s1[i] !== s2[j]) {
-                if (s1[i+1] === s2[j]) { 
-                    result += `<span class="err-extra">${input[i]}</span>`;
-                    i++;
-                } else if (s1[i] === s2[j+1]) { 
-                    result += `<span class="err-missing">_</span>`;
-                    j++;
-                } else { 
-                    result += `<span class="err-char">${input[i]}</span>`;
-                    i++; j++;
-                }
-            } else if (i < s1.length) { 
-                result += `<span class="err-extra">${input[i]}</span>`;
-                i++;
-            } else if (j < s2.length) { 
-                result += `<span class="err-missing">_</span>`;
-                j++;
-            }
+            if (i < s1.length && j < s2.length && s1[i] === s2[j]) { result += input[i]; i++; j++; }
+            else if (i < s1.length && j < s2.length && s1[i] !== s2[j]) {
+                if (s1[i+1] === s2[j]) { result += `<span class="err-extra">${input[i]}</span>`; i++; }
+                else if (s1[i] === s2[j+1]) { result += `<span class="err-missing">_</span>`; j++; }
+                else { result += `<span class="err-char">${input[i]}</span>`; i++; j++; }
+            } else if (i < s1.length) { result += `<span class="err-extra">${input[i]}</span>`; i++; }
+            else if (j < s2.length) { result += `<span class="err-missing">_</span>`; j++; }
         }
         return result;
     }
@@ -166,9 +148,7 @@
     function getProgressIcon(stage = 1) {
         const colors = ['#ff4444', '#ffbb33', '#ffeb3b', '#90EE90', '#006400'];
         let svg = `<svg width="14" height="8" viewBox="0 0 7 4" style="vertical-align: middle; margin-right: 6px;">`;
-        for (let i = 0; i < 5; i++) {
-            svg += `<rect x="${i * 1.4}" y="${4 - (i + 1) * 0.8}" width="0.8" height="${(i + 1) * 0.8}" fill="${stage > i + 1 ? colors[i] : '#ccc'}" />`;
-        }
+        for (let i = 0; i < 5; i++) { svg += `<rect x="${i * 1.4}" y="${4 - (i + 1) * 0.8}" width="0.8" height="${(i + 1) * 0.8}" fill="${stage > i + 1 ? colors[i] : '#ccc'}" />`; }
         return svg + `</svg>`;
     }
 
@@ -187,27 +167,19 @@
         document.getElementById('check-btn').disabled = false;
         document.getElementById('user-input').value = ""; 
         document.getElementById('feedback-area').innerText = "";
-
         const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
         const allCount = await db.items.count();
         document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
-        
         currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
         const promptEl = document.getElementById('display-prompt');
-
         if (currentItem) {
-            const text = currentItem.termSource;
-            promptEl.innerText = text;
-            if (text.length > 25) promptEl.style.fontSize = "1.1rem";
-            else if (text.length > 15) promptEl.style.fontSize = "1.4rem";
-            else promptEl.style.fontSize = "1.8rem";
+            const text = currentItem.termSource; promptEl.innerText = text;
+            if (text.length > 25) promptEl.style.fontSize = "1.1rem"; else if (text.length > 15) promptEl.style.fontSize = "1.4rem"; else promptEl.style.fontSize = "1.8rem";
             document.getElementById('display-badges').innerHTML = renderBadges(currentItem.tags);
             document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
         } else {
-            promptEl.innerText = allCount > 0 ? "Pause! 🎉" : "Vokabeln hinzufügen!";
-            promptEl.style.fontSize = "1.8rem";
-            document.getElementById('display-badges').innerHTML = "";
-            document.getElementById('direction-label').innerHTML = "";
+            promptEl.innerText = allCount > 0 ? "Pause! 🎉" : "Vokabeln hinzufügen!"; promptEl.style.fontSize = "1.8rem";
+            document.getElementById('display-badges').innerHTML = ""; document.getElementById('direction-label').innerHTML = "";
         }
     }
 
@@ -216,33 +188,18 @@
         const input = document.getElementById('user-input').value.trim();
         const targets = currentItem.termTarget.split('/').map(t => t.trim());
         const isCorrect = targets.some(t => t.toLowerCase() === input.toLowerCase());
-        
         await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect) });
-        
-        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget);
-        else speak(currentItem.termSource);
-
+        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
         const feedback = document.getElementById('feedback-area');
-        
         if (isCorrect) {
             feedback.innerHTML = `<span style="color: green;">Richtig!</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
-            document.getElementById('check-btn').disabled = true;
-            setTimeout(loadNextItem, 2500);
+            document.getElementById('check-btn').disabled = true; setTimeout(loadNextItem, 2500);
         } else {
-            let bestMatch = targets[0];
-            let minScore = getLevenshtein(input.toLowerCase(), bestMatch.toLowerCase());
-            targets.forEach(t => {
-                let s = getLevenshtein(input.toLowerCase(), t.toLowerCase());
-                if (s < minScore) { minScore = s; bestMatch = t; }
-            });
-
+            let bestMatch = targets[0]; let minScore = getLevenshtein(input.toLowerCase(), bestMatch.toLowerCase());
+            targets.forEach(t => { let s = getLevenshtein(input.toLowerCase(), t.toLowerCase()); if (s < minScore) { minScore = s; bestMatch = t; } });
             const errorAnalysis = getDiffHtml(input, bestMatch);
-            feedback.innerHTML = `<span style="color: red;">Leider falsch.</span><br>
-                                 Deine Eingabe: ${errorAnalysis}<br>
-                                 <small style="color: #666;">Richtige Lösung: ${currentItem.termTarget}</small>`;
-            
-            document.getElementById('check-btn').classList.add('hidden');
-            document.getElementById('next-btn').classList.remove('hidden');
+            feedback.innerHTML = `<span style="color: red;">Leider falsch.</span><br>Deine Eingabe: ${errorAnalysis}<br><small style="color: #666;">Richtige Lösung: ${currentItem.termTarget}</small>`;
+            document.getElementById('check-btn').classList.add('hidden'); document.getElementById('next-btn').classList.remove('hidden');
         }
     }
 
@@ -261,34 +218,14 @@
     async function renderList() {
         const query = document.getElementById('search-input').value.toLowerCase();
         let items = await db.items.toArray();
-        if (query) {
-            items = items.filter(i => i.termSource.toLowerCase().includes(query) || i.termTarget.toLowerCase().includes(query) || (i.tags && i.tags.toLowerCase().includes(query)));
-        }
+        if (query) { items = items.filter(i => (i.termSource || "").toLowerCase().includes(query) || (i.termTarget || "").toLowerCase().includes(query) || (i.tags && i.tags.toLowerCase().includes(query))); }
         const container = document.getElementById('vocab-list');
         container.innerHTML = items.map(i => {
+            if (!i.termSource || !i.termTarget) return ""; // Überspringe kaputte Einträge
             if (inlineEditingId === i.id) {
-                return `
-                <div class="vocab-item inline-edit-box">
-                    <input type="text" id="edit-src-${i.id}" value="${i.termSource}">
-                    <input type="text" id="edit-trg-${i.id}" value="${i.termTarget}">
-                    <input type="text" id="edit-tags-${i.id}" value="${i.tags || ''}">
-                    <div class="inline-btn-group">
-                        <button class="inline-btn save-btn" onclick="saveInline(${i.id})">Speichern</button>
-                        <button class="inline-btn cancel-btn" onclick="cancelInline()">Abbruch</button>
-                    </div>
-                </div>`;
+                return `<div class="vocab-item inline-edit-box"><input type="text" id="edit-src-${i.id}" value="${i.termSource}"><input type="text" id="edit-trg-${i.id}" value="${i.termTarget}"><input type="text" id="edit-tags-${i.id}" value="${i.tags || ''}"><div class="inline-btn-group"><button class="inline-btn save-btn" onclick="saveInline(${i.id})">Speichern</button><button class="inline-btn cancel-btn" onclick="cancelInline()">Abbruch</button></div></div>`;
             }
-            return `
-            <div class="vocab-item" style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <div>${getProgressIcon(i.srs.stage)} <strong>${i.termSource}</strong> - ${i.termTarget}</div>
-                    <div style="margin-top:4px;">${renderBadges(i.tags)}</div>
-                </div>
-                <div>
-                    <button class="list-btn" onclick="startInline(${i.id})">✎</button>
-                    <button class="list-btn" onclick="deleteVocab(${i.id})" style="color:red;">✕</button>
-                </div>
-            </div>`;
+            return `<div class="vocab-item" style="display:flex; justify-content:space-between; align-items:center;"><div><div>${getProgressIcon(i.srs.stage)} <strong>${i.termSource}</strong> - ${i.termTarget}</div><div style="margin-top:4px;">${renderBadges(i.tags)}</div></div><div><button class="list-btn" onclick="startInline(${i.id})">✎</button><button class="list-btn" onclick="deleteVocab(${i.id})" style="color:red;">✕</button></div></div>`;
         }).join('');
     }
 
@@ -299,13 +236,38 @@
         const termTarget = document.getElementById(`edit-trg-${id}`).value.trim();
         const tags = document.getElementById(`edit-tags-${id}`).value.trim();
         await db.items.update(id, { termSource, termTarget, tags });
-        inlineEditingId = null;
-        renderList(); loadNextItem();
+        inlineEditingId = null; renderList(); loadNextItem();
     }
 
-    async function deleteVocab(id) { if (confirm("Löschen?")) { await db.items.delete(id); renderList(); loadNextItem(); } }
+    async function clearDatabase() {
+        if (confirm("Möchtest du wirklich ALLE Vokabeln löschen, um sauber neu zu importieren?")) {
+            await db.items.clear(); alert("Datenbank wurde geleert."); renderList(); loadNextItem();
+        }
+    }
+
     async function exportData() { const items = await db.items.toArray(); const blob = new Blob([JSON.stringify(items)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup.json'; a.click(); }
-    async function importData(e) { const reader = new FileReader(); reader.onload = async (event) => { const data = JSON.parse(event.target.result); await db.items.bulkAdd(data); renderList(); loadNextItem(); }; reader.readAsText(e.target.files[0]); }
+    
+    async function importData(e) {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const data = JSON.parse(event.target.result);
+                if (!Array.isArray(data)) return;
+                const srsInit = { stage: 1, dueDate: 0 };
+                for (const entry of data) {
+                    if (entry.sv && entry.de) { // Format-Konvertierung für deine Liste
+                        await db.items.add({ termSource: entry.de, termTarget: entry.sv, direction: 'de-sv', tags: entry.tags || "", srs: srsInit });
+                        await db.items.add({ termSource: entry.sv, termTarget: entry.de, direction: 'sv-de', tags: entry.tags || "", srs: srsInit });
+                    } else if (entry.termSource && entry.termTarget) { // App-eigenes Backup-Format
+                        await db.items.add(entry);
+                    }
+                }
+                alert("Import erfolgreich!"); renderList(); loadNextItem();
+            } catch (err) { alert("Fehler beim Verarbeiten der Datei."); }
+        };
+        reader.readAsText(e.target.files[0]);
+    }
+
     function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
     function toggleView() { 
         const isHidden = document.getElementById('add-view').classList.toggle('hidden'); 

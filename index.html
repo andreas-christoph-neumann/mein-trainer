@@ -23,10 +23,21 @@
         .action-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; }
         .next-btn { background: #4caf50; margin-top: 0; }
         .hidden { display: none; }
+        
+        /* Fehler-Highlighting */
+        .err-char { color: #ff4444; text-decoration: underline; font-weight: bold; }
+        .err-missing { color: #ff4444; font-weight: bold; }
+        .err-extra { color: #ff4444; text-decoration: line-through; opacity: 0.7; }
+
+        /* Custom Modal Styles */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-box { background: white; padding: 1.5rem; border-radius: 15px; width: 85%; max-width: 400px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+        .modal-btns { display: flex; gap: 10px; margin-top: 20px; }
+        .modal-btn { flex: 1; padding: 12px; border-radius: 8px; border: none; font-size: 1rem; cursor: pointer; }
+
         #vocab-list .vocab-item { border-bottom: 1px solid #eee; padding: 10px; background: white; margin-bottom: 5px; border-radius: 5px; }
         .search-box { margin-bottom: 15px; border-color: var(--primary); }
         .inline-edit-box { display: flex; flex-direction: column; gap: 5px; background: #fffde7; padding: 10px; border: 1px solid var(--accent); border-radius: 8px; }
-        .inline-edit-box input { font-size: 0.9rem; padding: 6px; }
         .inline-btn-group { display: flex; gap: 5px; }
         .inline-btn { flex: 1; padding: 8px; border-radius: 5px; border: none; font-size: 0.8rem; cursor: pointer; }
         .save-btn { background: #4caf50; color: white; }
@@ -39,7 +50,7 @@
 <header>
     <div>
         <span id="stats">Lädt...</span>
-        <button onclick="clearDatabase()" style="background: #ff4444; color: white; border: none; padding: 5px 8px; border-radius: 5px; font-size: 0.7rem; margin-left: 10px;">Alles löschen</button>
+        <button onclick="customConfirm('Alle Daten wirklich löschen?', () => db.items.clear().then(loadNextItem))" style="background: #ff4444; color: white; border: none; padding: 5px 8px; border-radius: 5px; font-size: 0.7rem; margin-left: 10px;">Alles löschen</button>
     </div>
     <button onclick="toggleView()" id="viewBtn">Vokabeln verwalten</button>
 </header>
@@ -70,7 +81,7 @@
         <button class="action-btn" style="background:#d35400; font-size: 0.8rem; margin-top: 10px;" onclick="cleanupDatabase()">Defekte Einträge entfernen</button>
 
         <h3 style="margin-top:25px">Liste filtern</h3>
-        <input type="text" id="search-input" class="search-box" placeholder="Suchen nach Wort oder Tag..." oninput="renderList()">
+        <input type="text" id="search-input" class="search-box" placeholder="Suchen..." oninput="renderList()">
         <div id="vocab-list"></div>
     </div>
 </div>
@@ -92,6 +103,22 @@
 
     let currentItem = null;
     let inlineEditingId = null;
+
+    function customConfirm(message, onConfirm) {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+            <div class="modal-box">
+                <p style="margin:0; font-size:1.1rem; color:#333;">${message}</p>
+                <div class="modal-btns">
+                    <button class="modal-btn" id="modal-yes" style="background:var(--primary); color:white;">Ja</button>
+                    <button class="modal-btn" id="modal-no" style="background:#eee; color:#333;">Abbrechen</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelector('#modal-yes').onclick = () => { onConfirm(); overlay.remove(); };
+        overlay.querySelector('#modal-no').onclick = () => overlay.remove();
+    }
 
     function calculateSRS(item, correct) {
         let currentStage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
@@ -149,11 +176,7 @@
 
     function renderBadges(tags) {
         if (!tags) return "";
-        const styleKeys = ['ugs.', 'formell', 'slang'];
-        return tags.split(',').map(t => {
-            const isStyle = styleKeys.some(k => t.trim().toLowerCase().includes(k));
-            return `<span class="badge ${isStyle ? 'bg-style' : 'bg-grammar'}">${t.trim()}</span>`;
-        }).join('');
+        return tags.split(',').map(t => `<span class="badge bg-grammar">${t.trim()}</span>`).join('');
     }
 
     async function loadNextItem() {
@@ -166,14 +189,14 @@
         const allCount = await db.items.count();
         document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
         currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
-        const promptEl = document.getElementById('display-prompt');
         if (currentItem) {
+            const promptEl = document.getElementById('display-prompt');
             promptEl.innerText = currentItem.termSource;
             promptEl.style.fontSize = currentItem.termSource.length > 25 ? "1.1rem" : currentItem.termSource.length > 15 ? "1.4rem" : "1.8rem";
             document.getElementById('display-badges').innerHTML = renderBadges(currentItem.tags);
             document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
         } else {
-            promptEl.innerText = allCount > 0 ? "Pause! 🎉" : "Vokabeln hinzufügen!";
+            document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Vokabeln hinzufügen!";
             document.getElementById('display-badges').innerHTML = ""; document.getElementById('direction-label').innerHTML = "";
         }
     }
@@ -190,22 +213,22 @@
             feedback.innerHTML = `<span style="color: green;">Richtig!</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
             document.getElementById('check-btn').disabled = true; setTimeout(loadNextItem, 2500);
         } else {
-            let bestMatch = targets[0]; let minScore = getLevenshtein(input.toLowerCase(), bestMatch.toLowerCase());
+            let bestMatch = targets[0]; let minScore = 999;
             targets.forEach(t => { let s = getLevenshtein(input.toLowerCase(), t.toLowerCase()); if (s < minScore) { minScore = s; bestMatch = t; } });
             feedback.innerHTML = `<span style="color: red;">Leider falsch.</span><br>Deine Eingabe: ${getDiffHtml(input, bestMatch)}<br><small style="color: #666;">Richtige Lösung: ${currentItem.termTarget}</small>`;
             document.getElementById('check-btn').classList.add('hidden'); document.getElementById('next-btn').classList.remove('hidden');
         }
     }
 
-    async function addVocab(data = null) {
-        const sv = data ? data.sv : document.getElementById('input-sv').value.trim();
-        const de = data ? data.de : document.getElementById('input-de').value.trim();
-        const tags = data ? data.tags : document.getElementById('input-tags').value.trim();
+    async function addVocab() {
+        const sv = document.getElementById('input-sv').value.trim();
+        const de = document.getElementById('input-de').value.trim();
+        const tags = document.getElementById('input-tags').value.trim();
         if (!sv || !de) return;
         const srs = { stage: 1, dueDate: 0 };
         await db.items.add({ termSource: de, termTarget: sv, direction: 'de-sv', tags, srs });
         await db.items.add({ termSource: sv, termTarget: de, direction: 'sv-de', tags, srs });
-        if (!data) { document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = ""; document.getElementById('input-tags').value = ""; }
+        document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = ""; document.getElementById('input-tags').value = "";
         renderList(); loadNextItem();
     }
 
@@ -213,75 +236,43 @@
         const query = document.getElementById('search-input').value.toLowerCase();
         let items = await db.items.toArray();
         if (query) { items = items.filter(i => (i.termSource || "").toLowerCase().includes(query) || (i.termTarget || "").toLowerCase().includes(query) || (i.tags && i.tags.toLowerCase().includes(query))); }
-        const container = document.getElementById('vocab-list');
-        container.innerHTML = items.map(i => {
+        document.getElementById('vocab-list').innerHTML = items.map(i => {
             if (!i.termSource || !i.termTarget) return ""; 
             if (inlineEditingId === i.id) {
-                return `<div class="vocab-item inline-edit-box"><input type="text" id="edit-src-${i.id}" value="${i.termSource}"><input type="text" id="edit-trg-${i.id}" value="${i.termTarget}"><input type="text" id="edit-tags-${i.id}" value="${i.tags || ''}"><div class="inline-btn-group"><button class="inline-btn save-btn" onclick="saveInline(${i.id})">Speichern</button><button class="inline-btn cancel-btn" onclick="cancelInline()">Abbruch</button></div></div>`;
+                return `<div class="vocab-item inline-edit-box"><input type="text" id="edit-src-${i.id}" value="${i.termSource}"><input type="text" id="edit-trg-${i.id}" value="${i.termTarget}"><input type="text" id="edit-tags-${i.id}" value="${i.tags || ''}"><div class="inline-btn-group"><button class="inline-btn save-btn" onclick="saveInline(${i.id})">Speichern</button><button class="inline-btn cancel-btn" onclick="inlineEditingId=null;renderList()">Abbruch</button></div></div>`;
             }
-            return `<div class="vocab-item" style="display:flex; justify-content:space-between; align-items:center;"><div><div>${getProgressIcon(i.srs.stage)} <strong>${i.termSource}</strong> - ${i.termTarget}</div><div style="margin-top:4px;">${renderBadges(i.tags)}</div></div><div><button class="list-btn" onclick="startInline(${i.id})">✎</button><button class="list-btn" onclick="deleteVocab(${i.id})" style="color:red;">✕</button></div></div>`;
+            return `<div class="vocab-item" style="display:flex; justify-content:space-between; align-items:center;"><div><div>${getProgressIcon(i.srs.stage)} <strong>${i.termSource}</strong> - ${i.termTarget}</div><div style="margin-top:4px;">${renderBadges(i.tags)}</div></div><div><button class="list-btn" onclick="inlineEditingId=${i.id};renderList()">✎</button><button class="list-btn" onclick="customConfirm('Eintrag löschen?', () => {db.items.delete(${i.id}).then(renderList);})" style="color:red;">✕</button></div></div>`;
         }).join('');
     }
 
-    function startInline(id) { inlineEditingId = id; renderList(); }
-    function cancelInline() { inlineEditingId = null; renderList(); }
     async function saveInline(id) {
-        const termSource = document.getElementById(`edit-src-${id}`).value.trim();
-        const termTarget = document.getElementById(`edit-trg-${id}`).value.trim();
-        const tags = document.getElementById(`edit-tags-${id}`).value.trim();
-        await db.items.update(id, { termSource, termTarget, tags });
+        await db.items.update(id, { termSource: document.getElementById(`edit-src-${id}`).value, termTarget: document.getElementById(`edit-trg-${id}`).value, tags: document.getElementById(`edit-tags-${id}`).value });
         inlineEditingId = null; renderList(); loadNextItem();
     }
 
     async function cleanupDatabase() {
         const items = await db.items.toArray();
         const invalidIds = items.filter(i => !i.termSource || !i.termTarget).map(i => i.id);
-        if (invalidIds.length > 0) {
-            await db.items.bulkDelete(invalidIds);
-            alert(`${invalidIds.length} fehlerhafte Einträge wurden entfernt.`);
-            renderList(); loadNextItem();
-        } else {
-            alert("Keine fehlerhaften Einträge gefunden.");
-        }
+        if (invalidIds.length > 0) { await db.items.bulkDelete(invalidIds); alert(`${invalidIds.length} fehlerhafte Einträge entfernt.`); renderList(); loadNextItem(); }
     }
 
-    async function clearDatabase() {
-        if (confirm("Möchtest du wirklich ALLE Vokabeln löschen?")) {
-            await db.items.clear(); renderList(); loadNextItem();
-        }
-    }
-
-    async function exportData() { 
-        const items = await db.items.toArray(); 
-        const blob = new Blob([JSON.stringify(items)], {type: 'application/json'}); 
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup.json'; a.click(); 
-    }
+    async function exportData() { const items = await db.items.toArray(); const blob = new Blob([JSON.stringify(items)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup.json'; a.click(); }
     
     async function importData(e) {
         const reader = new FileReader();
-        reader.onload = async (event) => {
+        reader.onload = async (ev) => {
             try {
-                const data = JSON.parse(event.target.result);
-                if (!Array.isArray(data)) throw new Error("Kein gültiges Array.");
-                
-                const srsInit = { stage: 1, dueDate: 0 };
-                let count = 0;
-
+                const data = JSON.parse(ev.target.result);
+                if (!Array.isArray(data)) throw 1;
                 for (const entry of data) {
-                    // Validierung: Entweder neues Format (termSource/Target) oder altes Format (sv/de)
-                    if (entry.termSource && entry.termTarget) {
-                        await db.items.add(entry); count++;
-                    } else if (entry.sv && entry.de) {
-                        await db.items.add({ termSource: entry.de, termTarget: entry.sv, direction: 'de-sv', tags: entry.tags || "", srs: srsInit });
-                        await db.items.add({ termSource: entry.sv, termTarget: entry.de, direction: 'sv-de', tags: entry.tags || "", srs: srsInit });
-                        count++;
-                    } else {
-                        console.warn("Überspringe ungültigen Eintrag:", entry);
+                    if (entry.termSource && entry.termTarget) await db.items.add(entry);
+                    else if (entry.sv && entry.de) {
+                        await db.items.add({ termSource: entry.de, termTarget: entry.sv, direction: 'de-sv', tags: entry.tags || "", srs: { stage: 1, dueDate: 0 } });
+                        await db.items.add({ termSource: entry.sv, termTarget: entry.de, direction: 'sv-de', tags: entry.tags || "", srs: { stage: 1, dueDate: 0 } });
                     }
                 }
-                alert(`Import abgeschlossen. ${count} Einträge verarbeitet.`);
                 renderList(); loadNextItem();
-            } catch (err) { alert("Fehler: Die Datei hat kein gültiges Vokabel-Format."); }
+            } catch (err) { alert("Import-Format ungültig."); }
         };
         reader.readAsText(e.target.files[0]);
     }

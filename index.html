@@ -159,7 +159,6 @@
         return matrix[a.length][b.length];
     }
 
-    // Geänderte grafische Darstellung mit 5 Balken
     function getProgressIcon(stage = 1) {
         const colors = ['#ff4444', '#ff9800', '#ffeb3b', '#90EE90', '#006400'];
         const coloredCount = Math.min(Math.max(stage - 1, 0), 5);
@@ -197,17 +196,41 @@
         if (!currentItem) return;
         const rawInput = document.getElementById('user-input').value;
         const input = cleanString(rawInput).toLowerCase();
+        
+        // Splitte die Lösungen am Schrägstrich
         const targets = currentItem.termTarget.split('/').map(t => cleanString(t));
-        const isCorrect = targets.some(t => t.toLowerCase() === input);
+        const allPossibleVariants = [];
+        
+        targets.forEach(t => {
+            // Variante 1: Mit dem Text in den Klammern (Klammern selbst entfernen)
+            const withParens = cleanString(t.replace(/[()]/g, '')).toLowerCase();
+            // Variante 2: Ohne den Text in den Klammern
+            const withoutParens = cleanString(t.replace(/\([^)]*\)/g, '')).toLowerCase();
+            
+            allPossibleVariants.push(withParens);
+            if (withoutParens !== withParens) {
+                allPossibleVariants.push(withoutParens);
+            }
+        });
+
+        const isCorrect = allPossibleVariants.includes(input);
+        
         await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect) });
         if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
+        
         const feedback = document.getElementById('feedback-area');
         if (isCorrect) {
             feedback.innerHTML = `<span style="color: green;">Richtig!</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
             document.getElementById('check-btn').disabled = true; setTimeout(loadNextItem, 2500);
         } else {
-            let bestMatch = targets[0]; let minScore = 999;
-            targets.forEach(t => { let s = getLevenshtein(input, t.toLowerCase()); if (s < minScore) { minScore = s; bestMatch = t; } });
+            // Suche die Variante, die der Eingabe am nächsten ist, für die Korrekturanzeige
+            let bestMatch = allPossibleVariants[0];
+            let minScore = 999;
+            allPossibleVariants.forEach(v => {
+                let s = getLevenshtein(input, v);
+                if (s < minScore) { minScore = s; bestMatch = v; }
+            });
+            
             feedback.innerHTML = `<span style="color: red;">Leider falsch.</span><br>Deine Eingabe: ${getDiffHtml(cleanString(rawInput), bestMatch)}<br><small style="color: #666;">Richtige Lösung: ${currentItem.termTarget}</small>`;
             document.getElementById('check-btn').classList.add('hidden'); document.getElementById('next-btn').classList.remove('hidden');
         }

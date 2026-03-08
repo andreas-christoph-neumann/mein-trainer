@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-    <title>Svenska Trainer</title>
+    <title>Svenska Trainer Pro (Sync)</title>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
         :root {
             --primary: #0051a8;
             --accent: #ffcd00;
             --grammar: #7f8c8d;
-            /* Light Mode Colors */
             --bg: #f4f4f4;
             --card-bg: #ffffff;
             --text: #333333;
@@ -22,7 +21,6 @@
         }
 
         body.dark-mode {
-            /* Dark Mode Colors */
             --bg: #121212;
             --card-bg: #1e1e1e;
             --text: #e0e0e0;
@@ -68,6 +66,8 @@
         
         #theme-toggle { background: none; border: none; color: white; font-size: 1.4rem; cursor: pointer; padding: 5px; }
         .list-btn { background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 5px; color: var(--text); }
+        
+        .sync-section { background: var(--accent); color: #333; padding: 1rem; border-radius: 10px; margin-bottom: 20px; text-align: left; }
     </style>
 </head>
 <body class="light-mode">
@@ -91,6 +91,13 @@
     </div>
 
     <div id="add-view" class="hidden">
+        <div class="sync-section">
+            <strong style="display:block; margin-bottom:5px;">☁️ GitHub Cloud-Sync</strong>
+            <input type="password" id="github-token" placeholder="GitHub Personal Access Token" style="margin-bottom:10px;">
+            <button class="action-btn" style="background:var(--primary);" onclick="syncFromGist()">Jetzt Synchronisieren (Import)</button>
+            <small style="display:block; margin-top:5px; font-size:0.75rem;">Der Token wird nur lokal im Browser gespeichert.</small>
+        </div>
+
         <h3>Vokabeln verwalten</h3>
         <input type="text" id="input-sv" placeholder="Schwedisch">
         <input type="text" id="input-de" placeholder="Deutsch">
@@ -98,8 +105,8 @@
         <button class="action-btn" onclick="addVocab()">Speichern</button>
 
         <div style="display: flex; gap: 10px; margin-top: 20px;">
-            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="exportData()">Export</button>
-            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="document.getElementById('importFile').click()">Import</button>
+            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="exportData()">Backup Export</button>
+            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="document.getElementById('importFile').click()">Backup Import</button>
             <input type="file" id="importFile" class="hidden" accept=".json" onchange="importData(event)">
         </div>
         
@@ -123,13 +130,67 @@
 </div>
 
 <script>
+    const GIST_RAW_URL = 'https://gist.githubusercontent.com/andreas-christoph-neumann/89c2d3c10a13278890ef930003865fe7/raw/e171f296823b075b1319a3d711bda964202b3dfc/vokabeln.json';
+    const GIST_ID = '89c2d3c10a13278890ef930003865fe7';
+
     const db = new Dexie('VocabTrainerDB');
     db.version(1).stores({ items: '++id, termSource, termTarget, direction, tags, srs.dueDate' });
 
     let currentItem = null;
     let inlineEditingId = null;
 
-    // Theme Management
+    // --- CLOUD SYNC FUNKTIONEN ---
+
+    async function syncFromGist() {
+        const tokenInput = document.getElementById('github-token').value;
+        if(tokenInput) localStorage.setItem('github_token', tokenInput);
+        
+        try {
+            document.getElementById('display-prompt').innerText = "Synchronisiere...";
+            const response = await fetch(GIST_RAW_URL + '?t=' + Date.now()); // Cache-Busting
+            const data = await response.json();
+            
+            if (data && Array.isArray(data)) {
+                await db.items.clear();
+                await db.items.bulkAdd(data);
+                alert("Erfolgreich mit Cloud synchronisiert!");
+                location.reload();
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Fehler beim Cloud-Import. Prüfe den Link oder die Internetverbindung.");
+            loadNextItem();
+        }
+    }
+
+    async function pushToGist() {
+        const token = localStorage.getItem('github_token') || document.getElementById('github-token').value;
+        if (!token) return; // Ohne Token kein Upload
+
+        const allItems = await db.items.toArray();
+        try {
+            await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    files: {
+                        'vokabeln.json': {
+                            content: JSON.stringify(allItems, null, 2)
+                        }
+                    }
+                })
+            });
+            console.log("Cloud-Backup aktualisiert.");
+        } catch (err) {
+            console.error("Cloud-Save Fehler:", err);
+        }
+    }
+
+    // --- BESTEHENDE LOGIK (angepasst für Sync) ---
+
     function initTheme() {
         const saved = localStorage.getItem('theme');
         const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -137,6 +198,9 @@
             document.body.classList.add('dark-mode');
             document.getElementById('theme-toggle').innerText = '☀️';
         }
+        // Token Feld vorbefüllen
+        const savedToken = localStorage.getItem('github_token');
+        if(savedToken) document.getElementById('github-token').value = savedToken;
     }
 
     function toggleTheme() {
@@ -234,7 +298,7 @@
             document.getElementById('display-badges').innerHTML = (currentItem.tags || "").split(',').map(t => `<span class="badge bg-grammar">${t.trim()}</span>`).join('');
             document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
         } else {
-            document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Bitte Vokabeln importieren!";
+            document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Bitte Cloud-Sync nutzen!";
             document.getElementById('display-badges').innerHTML = ""; document.getElementById('direction-label').innerHTML = "";
         }
     }
@@ -255,6 +319,10 @@
 
         const isCorrect = allPossibleVariants.includes(input);
         await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect) });
+        
+        // Cloud Sync nach jedem Wort
+        pushToGist();
+
         if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
         
         const feedback = document.getElementById('feedback-area');
@@ -278,6 +346,8 @@
         await db.items.add({ termSource: de, termTarget: sv, direction: 'de-sv', tags, srs });
         await db.items.add({ termSource: sv, termTarget: de, direction: 'sv-de', tags, srs });
         document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = ""; document.getElementById('input-tags').value = "";
+        
+        await pushToGist();
         renderList(); loadNextItem();
     }
 
@@ -291,13 +361,15 @@
                 return `<div class="vocab-item inline-edit-box"><input type="text" id="edit-src-${i.id}" value="${i.termSource}"><input type="text" id="edit-trg-${i.id}" value="${i.termTarget}"><input type="text" id="edit-tags-${i.id}" value="${i.tags || ''}"><div style="display:flex;gap:5px"><button class="inline-btn" style="background:#4caf50;color:white" onclick="saveInline(${i.id})">OK</button><button class="inline-btn" style="background:#666;color:white" onclick="inlineEditingId=null;renderList()">X</button></div></div>`;
             }
             const badges = (i.tags || "").split(',').map(t => `<span class="badge bg-grammar">${t.trim()}</span>`).join('');
-            return `<div class="vocab-item" style="display:flex; justify-content:space-between; align-items:center;"><div><div>${getProgressIcon(i.srs.stage)} <strong>${i.termSource}</strong></div><div style="font-size:0.9rem;opacity:0.8">${i.termTarget}</div><div style="margin-top:4px;">${badges}</div></div><div><button class="list-btn" onclick="inlineEditingId=${i.id};renderList()">✎</button><button class="list-btn" onclick="customConfirm('Eintrag löschen?', () => db.items.delete(${i.id}).then(renderList))" style="color:#ff4444;">✕</button></div></div>`;
+            return `<div class="vocab-item" style="display:flex; justify-content:space-between; align-items:center;"><div><div>${getProgressIcon(i.srs.stage)} <strong>${i.termSource}</strong></div><div style="font-size:0.9rem;opacity:0.8">${i.termTarget}</div><div style="margin-top:4px;">${badges}</div></div><div><button class="list-btn" onclick="inlineEditingId=${i.id};renderList()">✎</button><button class="list-btn" onclick="customConfirm('Eintrag löschen?', async () => { await db.items.delete(${i.id}); await pushToGist(); renderList(); })" style="color:#ff4444;">✕</button></div></div>`;
         }).join('');
     }
 
     async function saveInline(id) {
         await db.items.update(id, { termSource: cleanString(document.getElementById(`edit-src-${id}`).value), termTarget: cleanString(document.getElementById(`edit-trg-${id}`).value), tags: cleanString(document.getElementById(`edit-tags-${id}`).value) });
-        inlineEditingId = null; renderList(); loadNextItem();
+        inlineEditingId = null; 
+        await pushToGist();
+        renderList(); loadNextItem();
     }
 
     async function exportData() { const items = await db.items.toArray(); const blob = new Blob([JSON.stringify(items)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup.json'; a.click(); }
@@ -311,12 +383,9 @@
                     if (entry.termSource && entry.termTarget) {
                         entry.termSource = cleanString(entry.termSource); entry.termTarget = cleanString(entry.termTarget); entry.tags = cleanString(entry.tags);
                         await db.items.add(entry);
-                    } else if (entry.sv && entry.de) { // Support für altes Format
-                        const srs = { stage: 1, dueDate: 0 };
-                        await db.items.add({ termSource: cleanString(entry.de), termTarget: cleanString(entry.sv), direction: 'de-sv', tags: cleanString(entry.tags), srs });
-                        await db.items.add({ termSource: cleanString(entry.sv), termTarget: cleanString(entry.de), direction: 'sv-de', tags: cleanString(entry.tags), srs });
                     }
                 }
+                await pushToGist();
                 renderList(); loadNextItem();
             } catch (err) { alert("Fehler beim Import."); }
         };
@@ -331,8 +400,19 @@
         document.getElementById('viewBtn').innerText = isHidden ? "Verwalten" : "Lernen";
         renderList(); 
     }
+
+    // Beim Start prüfen, ob Vokabeln da sind - falls nicht, automatisch von Gist laden
+    async function checkFirstRun() {
+        const count = await db.items.count();
+        if(count === 0 && localStorage.getItem('github_token')) {
+            syncFromGist();
+        } else {
+            loadNextItem();
+        }
+    }
+
     initTheme();
-    loadNextItem();
+    checkFirstRun();
 </script>
 </body>
 </html>

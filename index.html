@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-    <title>Svenska Trainer Pro (Cloud & Levels)</title>
+    <title>Svenska Trainer Pro (Cloud, Levels & Voice)</title>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
         :root {
@@ -133,7 +133,7 @@
     let currentItem = null;
     let inlineEditingId = null;
 
-    // --- PUNKTE & LEVEL LOGIK (Verbessert mit Zwischenstufen) ---
+    // --- PUNKTE & LEVEL LOGIK ---
 
     function getLevel(points) {
         const thresholds = [
@@ -150,7 +150,6 @@
             let t = thresholds[i];
             if (points >= t.min && points < t.max) {
                 if (t.name === "C2") return "C2";
-                // Berechne Zwischenstufe (0-9)
                 let range = t.max - t.min;
                 let step = range / 10;
                 let subLevel = Math.floor((points - t.min) / step);
@@ -164,11 +163,20 @@
         const allItems = await db.items.toArray();
         const totalScore = allItems.reduce((sum, item) => {
             const stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
-            return sum + Math.min(stage - 1, 5); // 0 Pkt bei Stufe 1, bis max 5 Pkt
+            return sum + Math.min(stage - 1, 5);
         }, 0);
 
         document.getElementById('score-label').innerText = `${totalScore.toLocaleString()} Pkt.`;
         document.getElementById('level-label').innerText = getLevel(totalScore);
+    }
+
+    // --- SPRACHAUSGABE ---
+
+    function speak(text) {
+        if (!text) return;
+        const ut = new SpeechSynthesisUtterance(text.split('/')[0]);
+        ut.lang = 'sv-SE'; ut.rate = 0.9;
+        window.speechSynthesis.speak(ut);
     }
 
     // --- CLOUD SYNC ---
@@ -176,22 +184,17 @@
     async function syncFromGist() {
         const tokenInput = document.getElementById('github-token').value;
         if(tokenInput) localStorage.setItem('github_token', tokenInput);
-        
         try {
             document.getElementById('display-prompt').innerText = "Synchronisiere...";
             const response = await fetch(GIST_RAW_URL + '?t=' + Date.now());
             const data = await response.json();
-            
             if (data && Array.isArray(data)) {
                 await db.items.clear();
                 await db.items.bulkAdd(data);
                 alert("Synchronisation abgeschlossen!");
                 location.reload();
             }
-        } catch (err) {
-            alert("Sync-Fehler.");
-            loadNextItem();
-        }
+        } catch (err) { alert("Sync-Fehler."); loadNextItem(); }
     }
 
     async function pushToGist() {
@@ -249,16 +252,17 @@
         });
 
         const isCorrect = allPossibleVariants.includes(input);
-        
         const newSrs = calculateSRS(currentItem, isCorrect);
         await db.items.update(currentItem.id, { srs: newSrs });
         
         pushToGist();
         
+        // Sprachausgabe bei Prüfung
+        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
+
         const feedback = document.getElementById('feedback-area');
         if (isCorrect) {
-            const earnedPoints = Math.min(newSrs.stage - 1, 5);
-            feedback.innerHTML = `<span style="color: #4caf50;">Richtig! +${earnedPoints} Pkt.</span>`;
+            feedback.innerHTML = `<span style="color: #4caf50;">Richtig! +${Math.min(newSrs.stage - 1, 5)} Pkt.</span>`;
             document.getElementById('check-btn').disabled = true; 
             setTimeout(loadNextItem, 1500);
         } else {
@@ -271,7 +275,6 @@
     function calculateSRS(item, correct) {
         let currentStage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
         if (!correct) return { stage: 1, dueDate: 0 };
-        
         let nextStage = currentStage + 1;
         const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
         let msToAdd = (nextStage === 2) ? rand(20, 50) * 3600000 : 

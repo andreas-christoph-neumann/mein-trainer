@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-    <title>Svenska Trainer Pro (Cloud, Levels & Voice)</title>
+    <title>Svenska Trainer Pro (Cloud, Levels & Diff)</title>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
         :root {
@@ -54,9 +54,11 @@
         .next-btn { background: #4caf50; margin-top: 0; }
         .hidden { display: none; }
         
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-        .modal-box { background: var(--card-bg); color: var(--text); padding: 1.5rem; border-radius: 15px; width: 85%; max-width: 400px; text-align: center; }
-        
+        /* Error Highlighting Styles */
+        .err-char { color: #ff4444; text-decoration: underline; font-weight: bold; }
+        .err-missing { color: #ff4444; font-weight: bold; }
+        .err-extra { color: #ff4444; text-decoration: line-through; opacity: 0.7; }
+
         #vocab-list .vocab-item { border-bottom: 1px solid var(--list-border); padding: 10px; background: var(--list-item-bg); margin-bottom: 5px; border-radius: 5px; }
         .sync-section { background: var(--accent); color: #333; padding: 1rem; border-radius: 10px; margin-bottom: 20px; text-align: left; }
     </style>
@@ -91,23 +93,11 @@
             <input type="password" id="github-token" placeholder="GitHub Personal Access Token" style="margin-bottom:10px;">
             <button class="action-btn" style="background:var(--primary);" onclick="syncFromGist()">Jetzt Synchronisieren (Import)</button>
         </div>
-
         <h3>Vokabeln verwalten</h3>
         <input type="text" id="input-sv" placeholder="Schwedisch">
         <input type="text" id="input-de" placeholder="Deutsch">
         <input type="text" id="input-tags" placeholder="Zusatzinfo (z.B. II, schw.)">
         <button class="action-btn" onclick="addVocab()">Speichern</button>
-
-        <div style="display: flex; gap: 10px; margin-top: 20px;">
-            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="exportData()">Backup Export</button>
-            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="document.getElementById('importFile').click()">Backup Import</button>
-            <input type="file" id="importFile" class="hidden" accept=".json" onchange="importData(event)">
-        </div>
-        
-        <button class="action-btn" style="background:#d35400; font-size: 0.8rem; margin-top: 10px;" onclick="customConfirm('Alle Daten wirklich löschen?', () => db.items.clear().then(loadNextItem))">Alles löschen</button>
-
-        <h3 style="margin-top:25px">Vokabelliste</h3>
-        <input type="text" id="search-input" placeholder="Suchen..." oninput="renderList()">
         <div id="vocab-list"></div>
     </div>
 </div>
@@ -126,15 +116,12 @@
 <script>
     const GIST_RAW_URL = 'https://gist.githubusercontent.com/andreas-christoph-neumann/89c2d3c10a13278890ef930003865fe7/raw/e171f296823b075b1319a3d711bda964202b3dfc/vokabeln.json';
     const GIST_ID = '89c2d3c10a13278890ef930003865fe7';
-
     const db = new Dexie('VocabTrainerDB');
     db.version(1).stores({ items: '++id, termSource, termTarget, direction, tags, srs.dueDate' });
 
     let currentItem = null;
-    let inlineEditingId = null;
 
     // --- PUNKTE & LEVEL LOGIK ---
-
     function getLevel(points) {
         const thresholds = [
             { name: "Beginner", min: 0, max: 5000 },
@@ -145,14 +132,10 @@
             { name: "C1", min: 80000, max: 160000 },
             { name: "C2", min: 160000, max: Infinity }
         ];
-
-        for (let i = 0; i < thresholds.length; i++) {
-            let t = thresholds[i];
+        for (let t of thresholds) {
             if (points >= t.min && points < t.max) {
                 if (t.name === "C2") return "C2";
-                let range = t.max - t.min;
-                let step = range / 10;
-                let subLevel = Math.floor((points - t.min) / step);
+                let subLevel = Math.floor((points - t.min) / ((t.max - t.min) / 10));
                 return `${t.name}.${subLevel}`;
             }
         }
@@ -161,186 +144,148 @@
 
     async function updateScoreDisplay() {
         const allItems = await db.items.toArray();
-        const totalScore = allItems.reduce((sum, item) => {
-            const stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
-            return sum + Math.min(stage - 1, 5);
-        }, 0);
-
-        document.getElementById('score-label').innerText = `${totalScore.toLocaleString()} Pkt.`;
-        document.getElementById('level-label').innerText = getLevel(totalScore);
+        const score = allItems.reduce((sum, i) => sum + Math.min((i.srs?.stage || 1) - 1, 5), 0);
+        document.getElementById('score-label').innerText = `${score.toLocaleString()} Pkt.`;
+        document.getElementById('level-label').innerText = getLevel(score);
     }
 
-    // --- SPRACHAUSGABE ---
-
+    // --- SPRACHAUSGABE & DIFF ---
     function speak(text) {
-        if (!text) return;
         const ut = new SpeechSynthesisUtterance(text.split('/')[0]);
         ut.lang = 'sv-SE'; ut.rate = 0.9;
         window.speechSynthesis.speak(ut);
     }
 
-    // --- CLOUD SYNC ---
-
-    async function syncFromGist() {
-        const tokenInput = document.getElementById('github-token').value;
-        if(tokenInput) localStorage.setItem('github_token', tokenInput);
-        try {
-            document.getElementById('display-prompt').innerText = "Synchronisiere...";
-            const response = await fetch(GIST_RAW_URL + '?t=' + Date.now());
-            const data = await response.json();
-            if (data && Array.isArray(data)) {
-                await db.items.clear();
-                await db.items.bulkAdd(data);
-                alert("Synchronisation abgeschlossen!");
-                location.reload();
-            }
-        } catch (err) { alert("Sync-Fehler."); loadNextItem(); }
+    function getDiffHtml(input, target) {
+        let result = ""; let i = 0, j = 0;
+        const s1 = input.toLowerCase(); const s2 = target.toLowerCase();
+        while (i < s1.length || j < s2.length) {
+            if (i < s1.length && j < s2.length && s1[i] === s2[j]) { result += input[i]; i++; j++; }
+            else if (i < s1.length && j < s2.length && s1[i] !== s2[j]) {
+                if (s1[i+1] === s2[j]) { result += `<span class="err-extra">${input[i]}</span>`; i++; }
+                else if (s1[i] === s2[j+1]) { result += `<span class="err-missing">_</span>`; j++; }
+                else { result += `<span class="err-char">${input[i]}</span>`; i++; j++; }
+            } else if (i < s1.length) { result += `<span class="err-extra">${input[i]}</span>`; i++; }
+            else if (j < s2.length) { result += `<span class="err-missing">_</span>`; j++; }
+        }
+        return result;
     }
 
-    async function pushToGist() {
-        const token = localStorage.getItem('github_token');
-        if (!token) return;
-        const allItems = await db.items.toArray();
-        try {
-            await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-                method: 'PATCH',
-                headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ files: { 'vokabeln.json': { content: JSON.stringify(allItems, null, 2) } } })
-            });
-        } catch (err) { console.error("Cloud Save Error"); }
+    function getLevenshtein(a, b) {
+        const matrix = Array.from({ length: a.length + 1 }, () => []);
+        for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+        for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+        for (let i = 1; i <= a.length; i++) {
+            for (let j = 1; j <= b.length; j++) {
+                const cost = a[i-1] === b[j-1] ? 0 : 1;
+                matrix[i][j] = Math.min(matrix[i-1][j]+1, matrix[i][j-1]+1, matrix[i-1][j-1]+cost);
+            }
+        }
+        return matrix[a.length][b.length];
     }
 
     // --- TRAINER LOGIK ---
+    async function checkAnswer() {
+        if (!currentItem) return;
+        const rawInput = document.getElementById('user-input').value;
+        const input = rawInput.trim().toLowerCase();
+        const targets = currentItem.termTarget.split('/').map(t => t.trim());
+        const variants = [];
+        targets.forEach(t => {
+            variants.push(t.replace(/[()]/g, '').toLowerCase());
+            let clean = t.replace(/\([^)]*\)/g, '').trim().toLowerCase();
+            if (clean && !variants.includes(clean)) variants.push(clean);
+        });
 
+        const isCorrect = variants.includes(input);
+        const newSrs = calculateSRS(currentItem, isCorrect);
+        await db.items.update(currentItem.id, { srs: newSrs });
+        pushToGist();
+        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
+
+        const feedback = document.getElementById('feedback-area');
+        if (isCorrect) {
+            feedback.innerHTML = `<span style="color: #4caf50;">Richtig! +${Math.min(newSrs.stage-1, 5)} Pkt.</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
+            document.getElementById('check-btn').disabled = true; setTimeout(loadNextItem, 1500);
+        } else {
+            let best = variants[0]; let min = 999;
+            variants.forEach(v => { let s = getLevenshtein(input, v); if (s < min) { min = s; best = v; } });
+            feedback.innerHTML = `<span style="color: #ff4444;">Falsch. (Reset auf 0 Pkt.)</span><br>Eingabe: ${getDiffHtml(rawInput.trim(), best)}<br><small>Lösung: ${currentItem.termTarget}</small>`;
+            document.getElementById('check-btn').classList.add('hidden'); document.getElementById('next-btn').classList.remove('hidden');
+        }
+    }
+
+    function calculateSRS(item, correct) {
+        let stage = item.srs?.stage || 1;
+        if (!correct) return { stage: 1, dueDate: 0 };
+        const next = stage + 1;
+        const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+        let ms = (next === 2) ? r(20, 50) * 3600000 : (next === 3) ? r(5, 10) * 86400000 : (next === 4) ? r(12, 16) * 86400000 : r(30, 180) * 86400000;
+        return { stage: next, dueDate: Date.now() + ms };
+    }
+
+    // --- SYSTEM FUNKTIONEN ---
     async function loadNextItem() {
         updateScoreDisplay();
         document.getElementById('check-btn').classList.remove('hidden');
         document.getElementById('next-btn').classList.add('hidden');
         document.getElementById('check-btn').disabled = false;
-        document.getElementById('user-input').value = ""; 
-        document.getElementById('feedback-area').innerText = "";
-        
+        document.getElementById('user-input').value = ""; document.getElementById('feedback-area').innerText = "";
         const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
-        const allCount = await db.items.count();
-        document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
-        
+        const all = await db.items.count();
+        document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${all}`;
         currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
         if (currentItem) {
-            const promptEl = document.getElementById('display-prompt');
-            promptEl.innerText = currentItem.termSource;
+            document.getElementById('display-prompt').innerText = currentItem.termSource;
             document.getElementById('display-badges').innerHTML = (currentItem.tags || "").split(',').map(t => `<span class="badge bg-grammar">${t.trim()}</span>`).join('');
             document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
         } else {
-            document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Bitte Cloud-Sync nutzen!";
-            document.getElementById('display-badges').innerHTML = "";
-            document.getElementById('direction-label').innerHTML = "";
+            document.getElementById('display-prompt').innerText = all > 0 ? "Pause! 🎉" : "Bitte Cloud-Sync nutzen!";
+            document.getElementById('display-badges').innerHTML = ""; document.getElementById('direction-label').innerHTML = "";
         }
     }
 
-    async function checkAnswer() {
-        if (!currentItem) return;
-        const rawInput = document.getElementById('user-input').value;
-        const input = cleanString(rawInput).toLowerCase();
-        const targets = currentItem.termTarget.split('/').map(t => cleanString(t));
-        const allPossibleVariants = [];
-        
-        targets.forEach(t => {
-            const withParens = cleanString(t.replace(/[()]/g, '')).toLowerCase();
-            const withoutParens = cleanString(t.replace(/\([^)]*\)/g, '')).toLowerCase();
-            allPossibleVariants.push(withParens);
-            if (withoutParens !== withParens) allPossibleVariants.push(withoutParens);
+    async function syncFromGist() {
+        const token = document.getElementById('github-token').value;
+        if(token) localStorage.setItem('github_token', token);
+        try {
+            const res = await fetch(GIST_RAW_URL + '?t=' + Date.now());
+            const data = await res.json();
+            if (data && Array.isArray(data)) { await db.items.clear(); await db.items.bulkAdd(data); location.reload(); }
+        } catch (e) { alert("Sync-Fehler."); loadNextItem(); }
+    }
+
+    async function pushToGist() {
+        const token = localStorage.getItem('github_token');
+        if (!token) return;
+        const all = await db.items.toArray();
+        fetch(`https://api.github.com/gists/${GIST_ID}`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ files: { 'vokabeln.json': { content: JSON.stringify(all, null, 2) } } })
         });
-
-        const isCorrect = allPossibleVariants.includes(input);
-        const newSrs = calculateSRS(currentItem, isCorrect);
-        await db.items.update(currentItem.id, { srs: newSrs });
-        
-        pushToGist();
-        
-        // Sprachausgabe bei Prüfung
-        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
-
-        const feedback = document.getElementById('feedback-area');
-        if (isCorrect) {
-            feedback.innerHTML = `<span style="color: #4caf50;">Richtig! +${Math.min(newSrs.stage - 1, 5)} Pkt.</span>`;
-            document.getElementById('check-btn').disabled = true; 
-            setTimeout(loadNextItem, 1500);
-        } else {
-            feedback.innerHTML = `<span style="color: #ff4444;">Falsch. (Reset auf 0 Pkt.)</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
-            document.getElementById('check-btn').classList.add('hidden'); 
-            document.getElementById('next-btn').classList.remove('hidden');
-        }
-    }
-
-    function calculateSRS(item, correct) {
-        let currentStage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
-        if (!correct) return { stage: 1, dueDate: 0 };
-        let nextStage = currentStage + 1;
-        const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-        let msToAdd = (nextStage === 2) ? rand(20, 50) * 3600000 : 
-                      (nextStage === 3) ? rand(5, 10) * 86400000 :
-                      (nextStage === 4) ? rand(12, 16) * 86400000 :
-                      rand(30, 180) * 86400000;
-        return { stage: nextStage, dueDate: Date.now() + msToAdd };
-    }
-
-    // --- HELPER ---
-
-    function initTheme() {
-        const saved = localStorage.getItem('theme');
-        if (saved === 'dark') { document.body.classList.add('dark-mode'); document.getElementById('theme-toggle').innerText = '☀️'; }
-        const savedToken = localStorage.getItem('github_token');
-        if(savedToken) document.getElementById('github-token').value = savedToken;
     }
 
     function toggleTheme() {
-        const isDark = document.body.classList.toggle('dark-mode');
-        localStorage.setItem('theme', isDark ? 'dark' : 'light');
-        document.getElementById('theme-toggle').innerText = isDark ? '☀️' : '🌙';
+        const dark = document.body.classList.toggle('dark-mode');
+        localStorage.setItem('theme', dark ? 'dark' : 'light');
+        document.getElementById('theme-toggle').innerText = dark ? '☀️' : '🌙';
     }
 
-    function cleanString(str) { return str ? str.replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim() : ""; }
-
-    function getProgressIcon(stage = 1) {
+    function getProgressIcon(s = 1) {
         const colors = ['#ff4444', '#ff9800', '#ffeb3b', '#90EE90', '#006400'];
-        const count = Math.min(Math.max(stage - 1, 0), 5);
+        const c = Math.min(Math.max(s - 1, 0), 5);
         let svg = `<svg width="16" height="8" viewBox="0 0 7.5 4" style="margin-right:6px">`;
-        for (let i = 0; i < 5; i++) svg += `<rect x="${i*1.5}" y="${4-(i+1)*0.8}" width="1" height="${(i+1)*0.8}" fill="${i<count ? colors[i] : '#444'}" />`;
+        for (let i = 0; i < 5; i++) svg += `<rect x="${i*1.5}" y="${4-(i+1)*0.8}" width="1" height="${(i+1)*0.8}" fill="${i<c ? colors[i] : '#444'}" />`;
         return svg + `</svg>`;
     }
 
-    async function addVocab() {
-        const sv = cleanString(document.getElementById('input-sv').value);
-        const de = cleanString(document.getElementById('input-de').value);
-        if (!sv || !de) return;
-        await db.items.bulkAdd([
-            { termSource: de, termTarget: sv, direction: 'de-sv', tags: document.getElementById('input-tags').value, srs: { stage: 1, dueDate: 0 } },
-            { termSource: sv, termTarget: de, direction: 'sv-de', tags: document.getElementById('input-tags').value, srs: { stage: 1, dueDate: 0 } }
-        ]);
-        document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = "";
-        pushToGist(); renderList(); loadNextItem();
-    }
-
-    async function renderList() {
-        const items = await db.items.toArray();
-        document.getElementById('vocab-list').innerHTML = items.map(i => `
-            <div class="vocab-item" style="display:flex; justify-content:space-between">
-                <div><strong>${i.termSource}</strong><br><small>${i.termTarget}</small></div>
-                <div style="font-size:0.8rem">${Math.min((i.srs.stage || 1)-1, 5)} Pkt.</div>
-            </div>`).join('');
-    }
-
-    function customConfirm(msg, fn) { if(confirm(msg)) fn(); }
     function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
-    function toggleView() { 
-        const isHidden = document.getElementById('add-view').classList.toggle('hidden'); 
-        document.getElementById('learn-view').classList.toggle('hidden'); 
-        document.getElementById('input-controls').classList.toggle('hidden'); 
-        document.getElementById('viewBtn').innerText = isHidden ? "Verwalten" : "Lernen";
-        renderList(); 
-    }
-
-    initTheme();
+    function toggleView() { document.getElementById('add-view').classList.toggle('hidden'); document.getElementById('learn-view').classList.toggle('hidden'); document.getElementById('input-controls').classList.toggle('hidden'); }
+    
+    // Init
+    if(localStorage.getItem('theme') === 'dark') { document.body.classList.add('dark-mode'); document.getElementById('theme-toggle').innerText = '☀️'; }
+    document.getElementById('github-token').value = localStorage.getItem('github_token') || "";
     db.items.count().then(c => { if(c === 0 && localStorage.getItem('github_token')) syncFromGist(); else loadNextItem(); });
 </script>
 </body>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-    <title>Svenska Trainer Pro (Cloud, Points & Diff)</title>
+    <title>Svenska Trainer Pro (Cloud, Levels & Full List)</title>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
         :root {
@@ -58,7 +58,12 @@
         .err-missing { color: #ff4444; font-weight: bold; }
         .err-extra { color: #ff4444; text-decoration: line-through; opacity: 0.7; }
 
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-box { background: var(--card-bg); color: var(--text); padding: 1.5rem; border-radius: 15px; width: 85%; max-width: 400px; text-align: center; }
+
         #vocab-list .vocab-item { border-bottom: 1px solid var(--list-border); padding: 10px; background: var(--list-item-bg); margin-bottom: 5px; border-radius: 5px; }
+        .inline-edit-box { display: flex; flex-direction: column; gap: 5px; background: var(--edit-bg) !important; padding: 10px; border: 1px solid var(--accent); border-radius: 8px; }
+        .list-btn { background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 5px; color: var(--text); }
         .sync-section { background: var(--accent); color: #333; padding: 1rem; border-radius: 10px; margin-bottom: 20px; text-align: left; }
     </style>
 </head>
@@ -92,11 +97,21 @@
             <input type="password" id="github-token" placeholder="GitHub Personal Access Token" style="margin-bottom:10px;">
             <button class="action-btn" style="background:var(--primary);" onclick="syncFromGist()">Jetzt Synchronisieren (Import)</button>
         </div>
+
         <h3>Vokabeln verwalten</h3>
         <input type="text" id="input-sv" placeholder="Schwedisch">
         <input type="text" id="input-de" placeholder="Deutsch">
         <input type="text" id="input-tags" placeholder="Zusatzinfo (z.B. II, schw.)">
         <button class="action-btn" onclick="addVocab()">Speichern</button>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="exportData()">Export</button>
+            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="document.getElementById('importFile').click()">Import</button>
+            <input type="file" id="importFile" class="hidden" accept=".json" onchange="importData(event)">
+        </div>
+
+        <h3 style="margin-top:25px">Vokabelliste</h3>
+        <input type="text" id="search-input" placeholder="Suchen..." oninput="renderList()">
         <div id="vocab-list"></div>
     </div>
 </div>
@@ -119,6 +134,7 @@
     db.version(1).stores({ items: '++id, termSource, termTarget, direction, tags, srs.dueDate' });
 
     let currentItem = null;
+    let inlineEditingId = null;
 
     // --- PUNKTE & LEVEL LOGIK ---
     function getLevel(points) {
@@ -198,60 +214,81 @@
 
         const isCorrect = variants.includes(input);
         const currentPoints = Math.min((currentItem.srs?.stage || 1) - 1, 5);
-        
         const newSrs = calculateSRS(currentItem, isCorrect);
+        
         await db.items.update(currentItem.id, { srs: newSrs });
         pushToGist();
         
         if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
 
-        const feedback = document.getElementById('feedback-area');
+        const fb = document.getElementById('feedback-area');
         if (isCorrect) {
-            const pointInfo = currentPoints < 5 ? "+1 Punkt" : "+0 Punkte (Max)";
-            feedback.innerHTML = `<span style="color: #4caf50;">Richtig! ${pointInfo}</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
+            fb.innerHTML = `<span style="color: #4caf50;">Richtig! ${currentPoints < 5 ? "+1 Punkt" : "+0 Pkt (Max)"}</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
             document.getElementById('check-btn').disabled = true; setTimeout(loadNextItem, 1500);
         } else {
             let best = variants[0]; let min = 999;
             variants.forEach(v => { let s = getLevenshtein(input, v); if (s < min) { min = s; best = v; } });
-            const lostInfo = currentPoints > 0 ? `-${currentPoints} Punkte` : "0 Punkte";
-            feedback.innerHTML = `<span style="color: #ff4444;">Falsch. (${lostInfo})</span><br>Eingabe: ${getDiffHtml(rawInput.trim(), best)}<br><small>Lösung: ${currentItem.termTarget}</small>`;
+            fb.innerHTML = `<span style="color: #ff4444;">Falsch. (-${currentPoints} Pkt)</span><br>Eingabe: ${getDiffHtml(rawInput.trim(), best)}<br><small>Lösung: ${currentItem.termTarget}</small>`;
             document.getElementById('check-btn').classList.add('hidden'); document.getElementById('next-btn').classList.remove('hidden');
         }
     }
 
     function calculateSRS(item, correct) {
-        let stage = item.srs?.stage || 1;
         if (!correct) return { stage: 1, dueDate: 0 };
+        let stage = item.srs?.stage || 1;
         const next = stage + 1;
         const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
         let ms = (next === 2) ? r(20, 50) * 3600000 : (next === 3) ? r(5, 10) * 86400000 : (next === 4) ? r(12, 16) * 86400000 : r(30, 180) * 86400000;
         return { stage: next, dueDate: Date.now() + ms };
     }
 
+    // --- VERWALTEN & LISTEN LOGIK ---
+    async function renderList() {
+        const query = document.getElementById('search-input').value.toLowerCase();
+        let items = await db.items.toArray();
+        if (query) items = items.filter(i => i.termSource.toLowerCase().includes(query) || i.termTarget.toLowerCase().includes(query) || (i.tags && i.tags.toLowerCase().includes(query)));
+        
+        document.getElementById('vocab-list').innerHTML = items.map(i => {
+            if (inlineEditingId === i.id) {
+                return `<div class="vocab-item inline-edit-box"><input type="text" id="edit-src-${i.id}" value="${i.termSource}"><input type="text" id="edit-trg-${i.id}" value="${i.termTarget}"><input type="text" id="edit-tags-${i.id}" value="${i.tags || ''}"><div style="display:flex;gap:5px"><button class="action-btn" style="background:#4caf50;padding:5px" onclick="saveInline(${i.id})">OK</button><button class="action-btn" style="background:#666;padding:5px" onclick="inlineEditingId=null;renderList()">X</button></div></div>`;
+            }
+            return `<div class="vocab-item" style="display:flex; justify-content:space-between; align-items:center;"><div><div>${getProgressIcon(i.srs.stage)} <strong>${i.termSource}</strong></div><div style="font-size:0.85rem;opacity:0.8">${i.termTarget}</div></div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:0.75rem">${Math.min((i.srs?.stage || 1)-1, 5)} Pkt.</span><button class="list-btn" onclick="inlineEditingId=${i.id};renderList()">✎</button><button class="list-btn" style="color:#ff4444" onclick="deleteVocab(${i.id})">✕</button></div></div>`;
+        }).join('');
+    }
+
+    async function saveInline(id) {
+        await db.items.update(id, { termSource: document.getElementById(`edit-src-${id}`).value, termTarget: document.getElementById(`edit-trg-${id}`).value, tags: document.getElementById(`edit-tags-${id}`).value });
+        inlineEditingId = null; pushToGist(); renderList(); updateScoreDisplay();
+    }
+
+    async function deleteVocab(id) {
+        if (confirm("Eintrag löschen?")) { await db.items.delete(id); pushToGist(); renderList(); updateScoreDisplay(); }
+    }
+
+    async function addVocab() {
+        const sv = document.getElementById('input-sv').value.trim();
+        const de = document.getElementById('input-de').value.trim();
+        const tags = document.getElementById('input-tags').value.trim();
+        if (!sv || !de) return;
+        await db.items.bulkAdd([
+            { termSource: de, termTarget: sv, direction: 'de-sv', tags, srs: { stage: 1, dueDate: 0 } },
+            { termSource: sv, termTarget: de, direction: 'sv-de', tags, srs: { stage: 1, dueDate: 0 } }
+        ]);
+        document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = ""; pushToGist(); renderList(); loadNextItem();
+    }
+
     // --- SYSTEM FUNKTIONEN ---
-    async function loadNextItem() {
-        updateScoreDisplay();
-        document.getElementById('check-btn').classList.remove('hidden');
-        document.getElementById('next-btn').classList.add('hidden');
-        document.getElementById('check-btn').disabled = false;
-        document.getElementById('user-input').value = ""; document.getElementById('feedback-area').innerText = "";
-        const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
-        const all = await db.items.count();
-        document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${all}`;
-        currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
-        if (currentItem) {
-            document.getElementById('display-prompt').innerText = currentItem.termSource;
-            document.getElementById('display-badges').innerHTML = (currentItem.tags || "").split(',').map(t => `<span class="badge bg-grammar">${t.trim()}</span>`).join('');
-            document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
-        } else {
-            document.getElementById('display-prompt').innerText = all > 0 ? "Pause! 🎉" : "Bitte Cloud-Sync nutzen!";
-            document.getElementById('display-badges').innerHTML = ""; document.getElementById('direction-label').innerHTML = "";
-        }
+    function toggleView() { 
+        const isHidden = document.getElementById('add-view').classList.toggle('hidden'); 
+        document.getElementById('learn-view').classList.toggle('hidden'); 
+        document.getElementById('input-controls').classList.toggle('hidden'); 
+        document.getElementById('viewBtn').innerText = isHidden ? "Verwalten" : "Lernen";
+        if(!isHidden) renderList(); 
     }
 
     async function syncFromGist() {
-        const token = document.getElementById('github-token').value;
-        if(token) localStorage.setItem('github_token', token);
+        const t = document.getElementById('github-token').value;
+        if(t) localStorage.setItem('github_token', t);
         try {
             const res = await fetch(GIST_RAW_URL + '?t=' + Date.now());
             const data = await res.json();
@@ -260,20 +297,23 @@
     }
 
     async function pushToGist() {
-        const token = localStorage.getItem('github_token');
-        if (!token) return;
+        const t = localStorage.getItem('github_token');
+        if (!t) return;
         const all = await db.items.toArray();
-        fetch(`https://api.github.com/gists/${GIST_ID}`, {
-            method: 'PATCH',
-            headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ files: { 'vokabeln.json': { content: JSON.stringify(all, null, 2) } } })
-        });
+        fetch(`https://api.github.com/gists/${GIST_ID}`, { method: 'PATCH', headers: { 'Authorization': `token ${t}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ files: { 'vokabeln.json': { content: JSON.stringify(all, null, 2) } } }) });
+    }
+
+    function exportData() { db.items.toArray().then(items => { const b = new Blob([JSON.stringify(items)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'backup.json'; a.click(); }); }
+    function importData(e) {
+        const r = new FileReader();
+        r.onload = async (ev) => { const data = JSON.parse(ev.target.result); await db.items.bulkAdd(data); pushToGist(); renderList(); loadNextItem(); };
+        r.readAsText(e.target.files[0]);
     }
 
     function toggleTheme() {
-        const dark = document.body.classList.toggle('dark-mode');
-        localStorage.setItem('theme', dark ? 'dark' : 'light');
-        document.getElementById('theme-toggle').innerText = dark ? '☀️' : '🌙';
+        const d = document.body.classList.toggle('dark-mode');
+        localStorage.setItem('theme', d ? 'dark' : 'light');
+        document.getElementById('theme-toggle').innerText = d ? '☀️' : '🌙';
     }
 
     function getProgressIcon(s = 1) {
@@ -285,9 +325,7 @@
     }
 
     function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
-    function toggleView() { document.getElementById('add-view').classList.toggle('hidden'); document.getElementById('learn-view').classList.toggle('hidden'); document.getElementById('input-controls').classList.toggle('hidden'); }
-    
-    // Init
+
     if(localStorage.getItem('theme') === 'dark') { document.body.classList.add('dark-mode'); document.getElementById('theme-toggle').innerText = '☀️'; }
     document.getElementById('github-token').value = localStorage.getItem('github_token') || "";
     db.items.count().then(c => { if(c === 0 && localStorage.getItem('github_token')) syncFromGist(); else loadNextItem(); });

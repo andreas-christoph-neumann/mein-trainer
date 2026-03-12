@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-    <title>Svenska Trainer Pro (Cloud, Levels & Diff)</title>
+    <title>Svenska Trainer Pro (Cloud, Points & Diff)</title>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
         :root {
@@ -54,7 +54,6 @@
         .next-btn { background: #4caf50; margin-top: 0; }
         .hidden { display: none; }
         
-        /* Error Highlighting Styles */
         .err-char { color: #ff4444; text-decoration: underline; font-weight: bold; }
         .err-missing { color: #ff4444; font-weight: bold; }
         .err-extra { color: #ff4444; text-decoration: line-through; opacity: 0.7; }
@@ -198,19 +197,24 @@
         });
 
         const isCorrect = variants.includes(input);
+        const currentPoints = Math.min((currentItem.srs?.stage || 1) - 1, 5);
+        
         const newSrs = calculateSRS(currentItem, isCorrect);
         await db.items.update(currentItem.id, { srs: newSrs });
         pushToGist();
+        
         if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
 
         const feedback = document.getElementById('feedback-area');
         if (isCorrect) {
-            feedback.innerHTML = `<span style="color: #4caf50;">Richtig! +${Math.min(newSrs.stage-1, 5)} Pkt.</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
+            const pointInfo = currentPoints < 5 ? "+1 Punkt" : "+0 Punkte (Max)";
+            feedback.innerHTML = `<span style="color: #4caf50;">Richtig! ${pointInfo}</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
             document.getElementById('check-btn').disabled = true; setTimeout(loadNextItem, 1500);
         } else {
             let best = variants[0]; let min = 999;
             variants.forEach(v => { let s = getLevenshtein(input, v); if (s < min) { min = s; best = v; } });
-            feedback.innerHTML = `<span style="color: #ff4444;">Falsch. (Reset auf 0 Pkt.)</span><br>Eingabe: ${getDiffHtml(rawInput.trim(), best)}<br><small>Lösung: ${currentItem.termTarget}</small>`;
+            const lostInfo = currentPoints > 0 ? `-${currentPoints} Punkte` : "0 Punkte";
+            feedback.innerHTML = `<span style="color: #ff4444;">Falsch. (${lostInfo})</span><br>Eingabe: ${getDiffHtml(rawInput.trim(), best)}<br><small>Lösung: ${currentItem.termTarget}</small>`;
             document.getElementById('check-btn').classList.add('hidden'); document.getElementById('next-btn').classList.remove('hidden');
         }
     }

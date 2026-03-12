@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-    <title>Svenska Trainer Pro (Sync)</title>
+    <title>Svenska Trainer Pro (Cloud & Levels)</title>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
         :root {
@@ -32,9 +32,12 @@
         }
 
         body { font-family: sans-serif; margin: 0; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100dvh; transition: background 0.3s, color 0.3s; }
-        header { background: var(--primary); color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center; }
+        header { background: var(--primary); color: white; padding: 0.8rem; display: flex; justify-content: space-between; align-items: center; }
         #app { flex: 1; display: flex; flex-direction: column; padding: 1rem; overflow-y: auto; }
         
+        .score-display { font-size: 0.85rem; background: rgba(0,0,0,0.2); padding: 5px 12px; border-radius: 20px; display: flex; align-items: center; gap: 10px; }
+        .level-badge { background: var(--accent); color: #000; font-weight: bold; padding: 2px 10px; border-radius: 12px; font-size: 0.8rem; min-width: 40px; text-align: center; }
+
         .card { background: var(--card-bg); padding: 1.5rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 1rem; transition: background 0.3s; }
         .word-prompt { font-size: 1.8rem; font-weight: bold; color: var(--text); margin-bottom: 5px; line-height: 1.2; word-break: break-word; }
         
@@ -51,22 +54,10 @@
         .next-btn { background: #4caf50; margin-top: 0; }
         .hidden { display: none; }
         
-        .err-char { color: #ff4444; text-decoration: underline; font-weight: bold; }
-        .err-missing { color: #ff4444; font-weight: bold; }
-        .err-extra { color: #ff4444; text-decoration: line-through; opacity: 0.7; }
-
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }
         .modal-box { background: var(--card-bg); color: var(--text); padding: 1.5rem; border-radius: 15px; width: 85%; max-width: 400px; text-align: center; }
-        .modal-btns { display: flex; gap: 10px; margin-top: 20px; }
-        .modal-btn { flex: 1; padding: 12px; border-radius: 8px; border: none; font-size: 1rem; cursor: pointer; }
-
+        
         #vocab-list .vocab-item { border-bottom: 1px solid var(--list-border); padding: 10px; background: var(--list-item-bg); margin-bottom: 5px; border-radius: 5px; }
-        .inline-edit-box { display: flex; flex-direction: column; gap: 5px; background: var(--edit-bg) !important; padding: 10px; border: 1px solid var(--accent); border-radius: 8px; }
-        .inline-btn { flex: 1; padding: 8px; border-radius: 5px; border: none; font-size: 0.8rem; cursor: pointer; }
-        
-        #theme-toggle { background: none; border: none; color: white; font-size: 1.4rem; cursor: pointer; padding: 5px; }
-        .list-btn { background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 5px; color: var(--text); }
-        
         .sync-section { background: var(--accent); color: #333; padding: 1rem; border-radius: 10px; margin-bottom: 20px; text-align: left; }
     </style>
 </head>
@@ -74,14 +65,18 @@
 
 <header>
     <div style="display:flex; align-items:center;">
-        <button id="theme-toggle" onclick="toggleTheme()" title="Farbschema umschalten">🌙</button>
-        <span id="stats" style="margin-left:10px">Lädt...</span>
+        <button id="theme-toggle" onclick="toggleTheme()" title="Farbschema umschalten" style="background:none; border:none; color:white; font-size:1.4rem; cursor:pointer;">🌙</button>
+        <div class="score-display">
+            <span id="level-label" class="level-badge">-</span>
+            <span id="score-label">0 Pkt.</span>
+        </div>
     </div>
-    <button onclick="toggleView()" id="viewBtn" style="background:rgba(255,255,255,0.2); border:1px solid white; color:white; padding:5px 10px; border-radius:5px;">Verwalten</button>
+    <button onclick="toggleView()" id="viewBtn" style="background:rgba(255,255,255,0.2); border:1px solid white; color:white; padding:5px 10px; border-radius:5px; cursor:pointer;">Verwalten</button>
 </header>
 
 <div id="app">
     <div id="learn-view">
+        <div id="stats" style="font-size: 0.75rem; opacity: 0.7; margin-bottom: 10px; text-align: center;">Fällig: 0 | Gesamt: 0</div>
         <div class="card">
             <div id="direction-label" style="font-size: 0.9rem; color: var(--primary); margin-bottom: 8px; font-weight: bold;"></div>
             <div class="word-prompt" id="display-prompt">Lade Vokabeln...</div>
@@ -95,7 +90,6 @@
             <strong style="display:block; margin-bottom:5px;">☁️ GitHub Cloud-Sync</strong>
             <input type="password" id="github-token" placeholder="GitHub Personal Access Token" style="margin-bottom:10px;">
             <button class="action-btn" style="background:var(--primary);" onclick="syncFromGist()">Jetzt Synchronisieren (Import)</button>
-            <small style="display:block; margin-top:5px; font-size:0.75rem;">Der Token wird nur lokal im Browser gespeichert.</small>
         </div>
 
         <h3>Vokabeln verwalten</h3>
@@ -139,7 +133,45 @@
     let currentItem = null;
     let inlineEditingId = null;
 
-    // --- CLOUD SYNC FUNKTIONEN ---
+    // --- PUNKTE & LEVEL LOGIK (Verbessert mit Zwischenstufen) ---
+
+    function getLevel(points) {
+        const thresholds = [
+            { name: "Beginner", min: 0, max: 5000 },
+            { name: "A1", min: 5000, max: 10000 },
+            { name: "A2", min: 10000, max: 20000 },
+            { name: "B1", min: 20000, max: 40000 },
+            { name: "B2", min: 40000, max: 80000 },
+            { name: "C1", min: 80000, max: 160000 },
+            { name: "C2", min: 160000, max: Infinity }
+        ];
+
+        for (let i = 0; i < thresholds.length; i++) {
+            let t = thresholds[i];
+            if (points >= t.min && points < t.max) {
+                if (t.name === "C2") return "C2";
+                // Berechne Zwischenstufe (0-9)
+                let range = t.max - t.min;
+                let step = range / 10;
+                let subLevel = Math.floor((points - t.min) / step);
+                return `${t.name}.${subLevel}`;
+            }
+        }
+        return "C2";
+    }
+
+    async function updateScoreDisplay() {
+        const allItems = await db.items.toArray();
+        const totalScore = allItems.reduce((sum, item) => {
+            const stage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
+            return sum + Math.min(stage - 1, 5); // 0 Pkt bei Stufe 1, bis max 5 Pkt
+        }, 0);
+
+        document.getElementById('score-label').innerText = `${totalScore.toLocaleString()} Pkt.`;
+        document.getElementById('level-label').innerText = getLevel(totalScore);
+    }
+
+    // --- CLOUD SYNC ---
 
     async function syncFromGist() {
         const tokenInput = document.getElementById('github-token').value;
@@ -147,159 +179,58 @@
         
         try {
             document.getElementById('display-prompt').innerText = "Synchronisiere...";
-            const response = await fetch(GIST_RAW_URL + '?t=' + Date.now()); // Cache-Busting
+            const response = await fetch(GIST_RAW_URL + '?t=' + Date.now());
             const data = await response.json();
             
             if (data && Array.isArray(data)) {
                 await db.items.clear();
                 await db.items.bulkAdd(data);
-                alert("Erfolgreich mit Cloud synchronisiert!");
+                alert("Synchronisation abgeschlossen!");
                 location.reload();
             }
         } catch (err) {
-            console.error(err);
-            alert("Fehler beim Cloud-Import. Prüfe den Link oder die Internetverbindung.");
+            alert("Sync-Fehler.");
             loadNextItem();
         }
     }
 
     async function pushToGist() {
-        const token = localStorage.getItem('github_token') || document.getElementById('github-token').value;
-        if (!token) return; // Ohne Token kein Upload
-
+        const token = localStorage.getItem('github_token');
+        if (!token) return;
         const allItems = await db.items.toArray();
         try {
             await fetch(`https://api.github.com/gists/${GIST_ID}`, {
                 method: 'PATCH',
-                headers: {
-                    'Authorization': `token ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    files: {
-                        'vokabeln.json': {
-                            content: JSON.stringify(allItems, null, 2)
-                        }
-                    }
-                })
+                headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ files: { 'vokabeln.json': { content: JSON.stringify(allItems, null, 2) } } })
             });
-            console.log("Cloud-Backup aktualisiert.");
-        } catch (err) {
-            console.error("Cloud-Save Fehler:", err);
-        }
+        } catch (err) { console.error("Cloud Save Error"); }
     }
 
-    // --- BESTEHENDE LOGIK (angepasst für Sync) ---
-
-    function initTheme() {
-        const saved = localStorage.getItem('theme');
-        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (saved === 'dark' || (!saved && systemDark)) {
-            document.body.classList.add('dark-mode');
-            document.getElementById('theme-toggle').innerText = '☀️';
-        }
-        // Token Feld vorbefüllen
-        const savedToken = localStorage.getItem('github_token');
-        if(savedToken) document.getElementById('github-token').value = savedToken;
-    }
-
-    function toggleTheme() {
-        const isDark = document.body.classList.toggle('dark-mode');
-        localStorage.setItem('theme', isDark ? 'dark' : 'light');
-        document.getElementById('theme-toggle').innerText = isDark ? '☀️' : '🌙';
-    }
-
-    function cleanString(str) {
-        if (!str) return "";
-        return str.replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
-    }
-
-    function customConfirm(message, onConfirm) {
-        const overlay = document.createElement('div');
-        overlay.className = 'modal-overlay';
-        overlay.innerHTML = `<div class="modal-box"><p>${message}</p><div class="modal-btns"><button class="modal-btn" id="modal-yes" style="background:var(--primary); color:white;">Ja</button><button class="modal-btn" id="modal-no" style="background:#666; color:white;">Abbrechen</button></div></div>`;
-        document.body.appendChild(overlay);
-        overlay.querySelector('#modal-yes').onclick = () => { onConfirm(); overlay.remove(); };
-        overlay.querySelector('#modal-no').onclick = () => overlay.remove();
-    }
-
-    function calculateSRS(item, correct) {
-        let currentStage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
-        const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-        if (!correct) return { stage: 1, dueDate: 0 };
-        let nextStage = currentStage + 1;
-        let msToAdd = (nextStage === 2) ? rand(20, 50) * 3600000 : 
-                      (nextStage === 3) ? rand(5, 10) * 86400000 :
-                      (nextStage === 4) ? rand(12, 16) * 86400000 :
-                      (nextStage === 5) ? rand(25, 35) * 86400000 :
-                      rand(150, 200) * Math.pow(2, nextStage - 6) * 86400000;
-        return { stage: nextStage, dueDate: Date.now() + msToAdd };
-    }
-
-    function speak(text) {
-        const ut = new SpeechSynthesisUtterance(text.split('/')[0]);
-        ut.lang = 'sv-SE'; ut.rate = 0.9;
-        window.speechSynthesis.speak(ut);
-    }
-
-    function getDiffHtml(input, target) {
-        let result = ""; let i = 0, j = 0;
-        const s1 = input.toLowerCase(); const s2 = target.toLowerCase();
-        while (i < s1.length || j < s2.length) {
-            if (i < s1.length && j < s2.length && s1[i] === s2[j]) { result += input[i]; i++; j++; }
-            else if (i < s1.length && j < s2.length && s1[i] !== s2[j]) {
-                if (s1[i+1] === s2[j]) { result += `<span class="err-extra">${input[i]}</span>`; i++; }
-                else if (s1[i] === s2[j+1]) { result += `<span class="err-missing">_</span>`; j++; }
-                else { result += `<span class="err-char">${input[i]}</span>`; i++; j++; }
-            } else if (i < s1.length) { result += `<span class="err-extra">${input[i]}</span>`; i++; }
-            else if (j < s2.length) { result += `<span class="err-missing">_</span>`; j++; }
-        }
-        return result;
-    }
-
-    function getLevenshtein(a, b) {
-        const matrix = Array.from({ length: a.length + 1 }, () => []);
-        for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
-        for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
-        for (let i = 1; i <= a.length; i++) {
-            for (let j = 1; j <= b.length; j++) {
-                const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-                matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
-            }
-        }
-        return matrix[a.length][b.length];
-    }
-
-    function getProgressIcon(stage = 1) {
-        const colors = ['#ff4444', '#ff9800', '#ffeb3b', '#90EE90', '#006400'];
-        const coloredCount = Math.min(Math.max(stage - 1, 0), 5);
-        let svg = `<svg width="16" height="8" viewBox="0 0 7.5 4" style="vertical-align: middle; margin-right: 6px;">`;
-        for (let i = 0; i < 5; i++) {
-            const color = i < coloredCount ? colors[i] : (document.body.classList.contains('dark-mode') ? '#444' : '#ccc');
-            svg += `<rect x="${i * 1.5}" y="${4 - (i + 1) * 0.8}" width="1" height="${(i + 1) * 0.8}" fill="${color}" />`;
-        }
-        return svg + `</svg>`;
-    }
+    // --- TRAINER LOGIK ---
 
     async function loadNextItem() {
+        updateScoreDisplay();
         document.getElementById('check-btn').classList.remove('hidden');
         document.getElementById('next-btn').classList.add('hidden');
         document.getElementById('check-btn').disabled = false;
         document.getElementById('user-input').value = ""; 
         document.getElementById('feedback-area').innerText = "";
+        
         const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
         const allCount = await db.items.count();
         document.getElementById('stats').innerText = `Fällig: ${due.length} | Gesamt: ${allCount}`;
+        
         currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
         if (currentItem) {
             const promptEl = document.getElementById('display-prompt');
             promptEl.innerText = currentItem.termSource;
-            promptEl.style.fontSize = currentItem.termSource.length > 25 ? "1.1rem" : currentItem.termSource.length > 15 ? "1.4rem" : "1.8rem";
             document.getElementById('display-badges').innerHTML = (currentItem.tags || "").split(',').map(t => `<span class="badge bg-grammar">${t.trim()}</span>`).join('');
             document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
         } else {
             document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Bitte Cloud-Sync nutzen!";
-            document.getElementById('display-badges').innerHTML = ""; document.getElementById('direction-label').innerHTML = "";
+            document.getElementById('display-badges').innerHTML = "";
+            document.getElementById('direction-label').innerHTML = "";
         }
     }
 
@@ -318,80 +249,85 @@
         });
 
         const isCorrect = allPossibleVariants.includes(input);
-        await db.items.update(currentItem.id, { srs: calculateSRS(currentItem, isCorrect) });
         
-        // Cloud Sync nach jedem Wort
+        const newSrs = calculateSRS(currentItem, isCorrect);
+        await db.items.update(currentItem.id, { srs: newSrs });
+        
         pushToGist();
-
-        if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
         
         const feedback = document.getElementById('feedback-area');
         if (isCorrect) {
-            feedback.innerHTML = `<span style="color: #4caf50;">Richtig!</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
-            document.getElementById('check-btn').disabled = true; setTimeout(loadNextItem, 2000);
+            const earnedPoints = Math.min(newSrs.stage - 1, 5);
+            feedback.innerHTML = `<span style="color: #4caf50;">Richtig! +${earnedPoints} Pkt.</span>`;
+            document.getElementById('check-btn').disabled = true; 
+            setTimeout(loadNextItem, 1500);
         } else {
-            let bestMatch = allPossibleVariants[0]; let minScore = 999;
-            allPossibleVariants.forEach(v => { let s = getLevenshtein(input, v); if (s < minScore) { minScore = s; bestMatch = v; } });
-            feedback.innerHTML = `<span style="color: #ff4444;">Falsch.</span><br>Eingabe: ${getDiffHtml(cleanString(rawInput), bestMatch)}<br><small>Lösung: ${currentItem.termTarget}</small>`;
-            document.getElementById('check-btn').classList.add('hidden'); document.getElementById('next-btn').classList.remove('hidden');
+            feedback.innerHTML = `<span style="color: #ff4444;">Falsch. (Reset auf 0 Pkt.)</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
+            document.getElementById('check-btn').classList.add('hidden'); 
+            document.getElementById('next-btn').classList.remove('hidden');
         }
+    }
+
+    function calculateSRS(item, correct) {
+        let currentStage = (item.srs && item.srs.stage) ? item.srs.stage : 1;
+        if (!correct) return { stage: 1, dueDate: 0 };
+        
+        let nextStage = currentStage + 1;
+        const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+        let msToAdd = (nextStage === 2) ? rand(20, 50) * 3600000 : 
+                      (nextStage === 3) ? rand(5, 10) * 86400000 :
+                      (nextStage === 4) ? rand(12, 16) * 86400000 :
+                      rand(30, 180) * 86400000;
+        return { stage: nextStage, dueDate: Date.now() + msToAdd };
+    }
+
+    // --- HELPER ---
+
+    function initTheme() {
+        const saved = localStorage.getItem('theme');
+        if (saved === 'dark') { document.body.classList.add('dark-mode'); document.getElementById('theme-toggle').innerText = '☀️'; }
+        const savedToken = localStorage.getItem('github_token');
+        if(savedToken) document.getElementById('github-token').value = savedToken;
+    }
+
+    function toggleTheme() {
+        const isDark = document.body.classList.toggle('dark-mode');
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        document.getElementById('theme-toggle').innerText = isDark ? '☀️' : '🌙';
+    }
+
+    function cleanString(str) { return str ? str.replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim() : ""; }
+
+    function getProgressIcon(stage = 1) {
+        const colors = ['#ff4444', '#ff9800', '#ffeb3b', '#90EE90', '#006400'];
+        const count = Math.min(Math.max(stage - 1, 0), 5);
+        let svg = `<svg width="16" height="8" viewBox="0 0 7.5 4" style="margin-right:6px">`;
+        for (let i = 0; i < 5; i++) svg += `<rect x="${i*1.5}" y="${4-(i+1)*0.8}" width="1" height="${(i+1)*0.8}" fill="${i<count ? colors[i] : '#444'}" />`;
+        return svg + `</svg>`;
     }
 
     async function addVocab() {
         const sv = cleanString(document.getElementById('input-sv').value);
         const de = cleanString(document.getElementById('input-de').value);
-        const tags = cleanString(document.getElementById('input-tags').value);
         if (!sv || !de) return;
-        const srs = { stage: 1, dueDate: 0 };
-        await db.items.add({ termSource: de, termTarget: sv, direction: 'de-sv', tags, srs });
-        await db.items.add({ termSource: sv, termTarget: de, direction: 'sv-de', tags, srs });
-        document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = ""; document.getElementById('input-tags').value = "";
-        
-        await pushToGist();
-        renderList(); loadNextItem();
+        await db.items.bulkAdd([
+            { termSource: de, termTarget: sv, direction: 'de-sv', tags: document.getElementById('input-tags').value, srs: { stage: 1, dueDate: 0 } },
+            { termSource: sv, termTarget: de, direction: 'sv-de', tags: document.getElementById('input-tags').value, srs: { stage: 1, dueDate: 0 } }
+        ]);
+        document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = "";
+        pushToGist(); renderList(); loadNextItem();
     }
 
     async function renderList() {
-        const query = document.getElementById('search-input').value.toLowerCase();
-        let items = await db.items.toArray();
-        if (query) { items = items.filter(i => (i.termSource || "").toLowerCase().includes(query) || (i.termTarget || "").toLowerCase().includes(query) || (i.tags && i.tags.toLowerCase().includes(query))); }
-        document.getElementById('vocab-list').innerHTML = items.map(i => {
-            if (!i.termSource || !i.termTarget) return ""; 
-            if (inlineEditingId === i.id) {
-                return `<div class="vocab-item inline-edit-box"><input type="text" id="edit-src-${i.id}" value="${i.termSource}"><input type="text" id="edit-trg-${i.id}" value="${i.termTarget}"><input type="text" id="edit-tags-${i.id}" value="${i.tags || ''}"><div style="display:flex;gap:5px"><button class="inline-btn" style="background:#4caf50;color:white" onclick="saveInline(${i.id})">OK</button><button class="inline-btn" style="background:#666;color:white" onclick="inlineEditingId=null;renderList()">X</button></div></div>`;
-            }
-            const badges = (i.tags || "").split(',').map(t => `<span class="badge bg-grammar">${t.trim()}</span>`).join('');
-            return `<div class="vocab-item" style="display:flex; justify-content:space-between; align-items:center;"><div><div>${getProgressIcon(i.srs.stage)} <strong>${i.termSource}</strong></div><div style="font-size:0.9rem;opacity:0.8">${i.termTarget}</div><div style="margin-top:4px;">${badges}</div></div><div><button class="list-btn" onclick="inlineEditingId=${i.id};renderList()">✎</button><button class="list-btn" onclick="customConfirm('Eintrag löschen?', async () => { await db.items.delete(${i.id}); await pushToGist(); renderList(); })" style="color:#ff4444;">✕</button></div></div>`;
-        }).join('');
+        const items = await db.items.toArray();
+        document.getElementById('vocab-list').innerHTML = items.map(i => `
+            <div class="vocab-item" style="display:flex; justify-content:space-between">
+                <div><strong>${i.termSource}</strong><br><small>${i.termTarget}</small></div>
+                <div style="font-size:0.8rem">${Math.min((i.srs.stage || 1)-1, 5)} Pkt.</div>
+            </div>`).join('');
     }
 
-    async function saveInline(id) {
-        await db.items.update(id, { termSource: cleanString(document.getElementById(`edit-src-${id}`).value), termTarget: cleanString(document.getElementById(`edit-trg-${id}`).value), tags: cleanString(document.getElementById(`edit-tags-${id}`).value) });
-        inlineEditingId = null; 
-        await pushToGist();
-        renderList(); loadNextItem();
-    }
-
-    async function exportData() { const items = await db.items.toArray(); const blob = new Blob([JSON.stringify(items)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup.json'; a.click(); }
-    
-    async function importData(e) {
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-            try {
-                const data = JSON.parse(ev.target.result);
-                for (const entry of data) {
-                    if (entry.termSource && entry.termTarget) {
-                        entry.termSource = cleanString(entry.termSource); entry.termTarget = cleanString(entry.termTarget); entry.tags = cleanString(entry.tags);
-                        await db.items.add(entry);
-                    }
-                }
-                await pushToGist();
-                renderList(); loadNextItem();
-            } catch (err) { alert("Fehler beim Import."); }
-        };
-        reader.readAsText(e.target.files[0]);
-    }
-
+    function customConfirm(msg, fn) { if(confirm(msg)) fn(); }
     function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
     function toggleView() { 
         const isHidden = document.getElementById('add-view').classList.toggle('hidden'); 
@@ -401,18 +337,8 @@
         renderList(); 
     }
 
-    // Beim Start prüfen, ob Vokabeln da sind - falls nicht, automatisch von Gist laden
-    async function checkFirstRun() {
-        const count = await db.items.count();
-        if(count === 0 && localStorage.getItem('github_token')) {
-            syncFromGist();
-        } else {
-            loadNextItem();
-        }
-    }
-
     initTheme();
-    checkFirstRun();
+    db.items.count().then(c => { if(c === 0 && localStorage.getItem('github_token')) syncFromGist(); else loadNextItem(); });
 </script>
 </body>
 </html>

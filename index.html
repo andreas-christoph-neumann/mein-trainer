@@ -45,11 +45,10 @@
         .badge { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; color: white; font-weight: bold; text-transform: uppercase; }
         .bg-grammar { background-color: var(--grammar); }
         
-        .controls { padding: 1rem; background: var(--control-bg); border-top: 1px solid var(--input-border); transition: background 0.3s; }
-        .helper-bar { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px; }
-        .helper-btn { padding: 8px 12px; font-size: 1rem; border: 1px solid var(--input-border); border-radius: 5px; background: var(--bg); color: var(--text); }
+        /* Verschlankte Controls */
+        .controls { padding: 0.8rem 1rem; background: var(--control-bg); border-top: 1px solid var(--input-border); transition: background 0.3s; }
         
-        input { width: 100%; padding: 10px; font-size: 1rem; border: 2px solid var(--input-border); border-radius: 8px; box-sizing: border-box; margin-bottom: 5px; background: var(--bg); color: var(--text); }
+        input { width: 100%; padding: 12px; font-size: 1rem; border: 2px solid var(--input-border); border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; background: var(--bg); color: var(--text); }
         .action-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; }
         .next-btn { background: #4caf50; margin-top: 0; }
         .hidden { display: none; }
@@ -111,12 +110,7 @@
 </div>
 
 <div class="controls" id="input-controls">
-    <div class="helper-bar">
-        <button class="helper-btn" onclick="addChar('å')">å</button>
-        <button class="helper-btn" onclick="addChar('ä')">ä</button>
-        <button class="helper-btn" onclick="addChar('ö')">ö</button>
-    </div>
-    <input type="text" id="user-input" placeholder="Deine Antwort..." autocomplete="off">
+    <input type="text" id="user-input" placeholder="Deine Antwort..." autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true">
     <button class="action-btn" id="check-btn" onclick="checkAnswer()">Prüfen</button>
     <button class="action-btn next-btn hidden" id="next-btn" onclick="loadNextItem()">Weiter</button>
 </div>
@@ -160,10 +154,9 @@
         document.getElementById('stats-summary').innerText = `Fällig: ${due.length} | Gesamt: ${allItems.length}`;
     }
 
-    // --- SPRACHAUSGABE (FIXED) ---
+    // --- SPRACHAUSGABE ---
     function speak(text) {
         if (!text) return;
-        // Vorherige Sprachausgabe abbrechen (verhindert Hänger)
         window.speechSynthesis.cancel();
         const ut = new SpeechSynthesisUtterance(text.split('/')[0]);
         ut.lang = 'sv-SE'; 
@@ -220,7 +213,6 @@
         await db.items.update(currentItem.id, { srs: newSrs });
         pushToGist();
         
-        // Sprachausgabe (Swedish part)
         if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
 
         const feedback = document.getElementById('feedback-area');
@@ -353,8 +345,6 @@
         for (let i = 0; i < 5; i++) svg += `<rect x="${i*1.5}" y="${4-(i+1)*0.8}" width="1" height="${(i+1)*0.8}" fill="${i<c ? colors[i] : '#444'}" />`;
         return svg + `</svg>`;
     }
-
-    function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
 
     // Init
     if(localStorage.getItem('theme') === 'dark') { document.body.classList.add('dark-mode'); document.getElementById('theme-toggle').innerText = '☀️'; }

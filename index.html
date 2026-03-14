@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-    <title>Svenska Trainer Pro (Cloud, Levels, Points & Diff)</title>
+    <title>Svenska Trainer Pro (Cloud, Level, Diff & Voice-Fixed)</title>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
         :root {
@@ -100,8 +100,8 @@
         <input type="text" id="input-tags" placeholder="Zusatzinfo (z.B. II, schw.)">
         <button class="action-btn" onclick="addVocab()">Speichern</button>
         <div style="display: flex; gap: 10px; margin-top: 20px;">
-            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="exportData()">Export</button>
-            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="document.getElementById('importFile').click()">Import</button>
+            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="exportData()">Backup Export</button>
+            <button class="action-btn" style="background:#666; font-size: 0.8rem;" onclick="document.getElementById('importFile').click()">Backup Import</button>
             <input type="file" id="importFile" class="hidden" accept=".json" onchange="importData(event)">
         </div>
         <h3 style="margin-top:25px">Vokabelliste</h3>
@@ -160,14 +160,18 @@
         document.getElementById('stats-summary').innerText = `Fällig: ${due.length} | Gesamt: ${allItems.length}`;
     }
 
-    // --- SPRACHAUSGABE & DIFF ---
+    // --- SPRACHAUSGABE (FIXED) ---
     function speak(text) {
-        if(!text) return;
+        if (!text) return;
+        // Vorherige Sprachausgabe abbrechen (verhindert Hänger)
+        window.speechSynthesis.cancel();
         const ut = new SpeechSynthesisUtterance(text.split('/')[0]);
-        ut.lang = 'sv-SE'; ut.rate = 0.9;
+        ut.lang = 'sv-SE'; 
+        ut.rate = 0.9;
         window.speechSynthesis.speak(ut);
     }
 
+    // --- DIFFERENZ ANALYSE ---
     function getDiffHtml(input, target) {
         let result = ""; let i = 0, j = 0;
         const s1 = input.toLowerCase(); const s2 = target.toLowerCase();
@@ -216,16 +220,19 @@
         await db.items.update(currentItem.id, { srs: newSrs });
         pushToGist();
         
+        // Sprachausgabe (Swedish part)
         if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
 
         const feedback = document.getElementById('feedback-area');
         if (isCorrect) {
-            feedback.innerHTML = `<span style="color: #4caf50;">Richtig! ${currentPoints < 5 ? "+1 Punkt" : "+0 Pkt (Max)"}</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
+            const pointInfo = currentPoints < 5 ? "+1 Punkt" : "+0 Pkt (Max)";
+            feedback.innerHTML = `<span style="color: #4caf50;">Richtig! ${pointInfo}</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
             document.getElementById('check-btn').disabled = true; setTimeout(loadNextItem, 1500);
         } else {
             let best = variants[0]; let min = 999;
             variants.forEach(v => { let s = getLevenshtein(input, v); if (s < min) { min = s; best = v; } });
-            feedback.innerHTML = `<span style="color: #ff4444;">Falsch. (-${currentPoints} Pkt)</span><br>Eingabe: ${getDiffHtml(rawInput.trim(), best)}<br><small>Lösung: ${currentItem.termTarget}</small>`;
+            const lostInfo = currentPoints > 0 ? `-${currentPoints} Punkte` : "0 Punkte";
+            feedback.innerHTML = `<span style="color: #ff4444;">Falsch. (${lostInfo})</span><br>Eingabe: ${getDiffHtml(rawInput.trim(), best)}<br><small>Lösung: ${currentItem.termTarget}</small>`;
             document.getElementById('check-btn').classList.add('hidden'); document.getElementById('next-btn').classList.remove('hidden');
         }
     }
@@ -296,7 +303,7 @@
         document.getElementById('input-sv').value = ""; document.getElementById('input-de').value = ""; pushToGist(); renderList(); loadNextItem();
     }
 
-    // --- SYSTEM ---
+    // --- SYSTEM FUNKTIONEN ---
     function toggleView() { 
         const isHidden = document.getElementById('add-view').classList.toggle('hidden'); 
         document.getElementById('learn-view').classList.toggle('hidden'); 
@@ -319,7 +326,11 @@
         const t = localStorage.getItem('github_token');
         if (!t) return;
         const all = await db.items.toArray();
-        fetch(`https://api.github.com/gists/${GIST_ID}`, { method: 'PATCH', headers: { 'Authorization': `token ${t}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ files: { 'vokabeln.json': { content: JSON.stringify(all, null, 2) } } }) });
+        fetch(`https://api.github.com/gists/${GIST_ID}`, { 
+            method: 'PATCH', 
+            headers: { 'Authorization': `token ${t}`, 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ files: { 'vokabeln.json': { content: JSON.stringify(all, null, 2) } } }) 
+        });
     }
 
     function exportData() { db.items.toArray().then(items => { const b = new Blob([JSON.stringify(items)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'backup.json'; a.click(); }); }
@@ -345,6 +356,7 @@
 
     function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
 
+    // Init
     if(localStorage.getItem('theme') === 'dark') { document.body.classList.add('dark-mode'); document.getElementById('theme-toggle').innerText = '☀️'; }
     document.getElementById('github-token').value = localStorage.getItem('github_token') || "";
     db.items.count().then(c => { if(c === 0 && localStorage.getItem('github_token')) syncFromGist(); else loadNextItem(); });

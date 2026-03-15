@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-    <title>Svenska Trainer Pro (Cloud, Level, Diff & Voice-Fixed)</title>
+    <title>Svenska Trainer Pro</title>
+    
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 10'><rect width='16' height='10' fill='%230051a8'/><path d='M5 0v10M0 4h16' stroke='%23ffcd00' stroke-width='2'/></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 10'><rect width='16' height='10' fill='%230051a8'/><path d='M5 0v10M0 4h16' stroke='%23ffcd00' stroke-width='2'/></svg>">
+    
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
         :root {
@@ -45,7 +49,6 @@
         .badge { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; color: white; font-weight: bold; text-transform: uppercase; }
         .bg-grammar { background-color: var(--grammar); }
         
-        /* Verschlankte Controls */
         .controls { padding: 0.8rem 1rem; background: var(--control-bg); border-top: 1px solid var(--input-border); transition: background 0.3s; }
         
         input { width: 100%; padding: 12px; font-size: 1rem; border: 2px solid var(--input-border); border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; background: var(--bg); color: var(--text); }
@@ -346,7 +349,8 @@
         return svg + `</svg>`;
     }
 
-    // Init
+    function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
+
     if(localStorage.getItem('theme') === 'dark') { document.body.classList.add('dark-mode'); document.getElementById('theme-toggle').innerText = '☀️'; }
     document.getElementById('github-token').value = localStorage.getItem('github_token') || "";
     db.items.count().then(c => { if(c === 0 && localStorage.getItem('github_token')) syncFromGist(); else loadNextItem(); });

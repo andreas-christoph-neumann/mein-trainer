@@ -137,6 +137,16 @@
     inputField.addEventListener('focus', () => document.body.classList.add('keyboard-open'));
     inputField.addEventListener('blur', () => document.body.classList.remove('keyboard-open'));
 
+    // --- BEREINIGUNGSFUNKTION (Verbessert für doppelte Leerzeichen & Satzzeichen) ---
+    function cleanString(str) {
+        if (!str) return "";
+        return str
+            .replace(/[\u200B-\u200D\uFEFF]/g, '') // Unsichtbare Zeichen
+            .replace(/\s+/g, ' ')                  // Doppelte Leerzeichen -> eines
+            .replace(/\s+([?.!,])/g, '$1')         // Leerzeichen vor Satzzeichen entfernen
+            .trim();
+    }
+
     // --- PUNKTE & LEVEL LOGIK ---
     function getLevel(points) {
         const thresholds = [
@@ -209,12 +219,15 @@
     async function checkAnswer() {
         if (!currentItem) return;
         const rawInput = document.getElementById('user-input').value;
-        const input = rawInput.trim().toLowerCase();
+        const input = cleanString(rawInput).toLowerCase();
         const targets = currentItem.termTarget.split('/').map(t => t.trim());
         const variants = [];
+        
         targets.forEach(t => {
-            variants.push(t.replace(/[()]/g, '').toLowerCase());
-            let clean = t.replace(/\([^)]*\)/g, '').trim().toLowerCase();
+            // Variante 1: Nur Klammern entfernen, Text behalten
+            variants.push(cleanString(t.replace(/[()]/g, '')).toLowerCase());
+            // Variante 2: Klammern UND deren Inhalt entfernen
+            let clean = cleanString(t.replace(/\([^)]*\)/g, '')).toLowerCase();
             if (clean && !variants.includes(clean)) variants.push(clean);
         });
 
@@ -266,7 +279,7 @@
             promptEl.style.fontSize = currentItem.termSource.length > 25 ? "1.1rem" : currentItem.termSource.length > 15 ? "1.4rem" : "1.8rem";
             document.getElementById('display-badges').innerHTML = (currentItem.tags || "").split(',').map(t => `<span class="badge bg-grammar">${t.trim()}</span>`).join('');
             
-            // SRS Balken wieder hinzufügen
+            // SRS Balken
             document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
         } else {
             document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Bitte Cloud-Sync nutzen!";

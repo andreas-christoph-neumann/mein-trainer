@@ -38,7 +38,7 @@
         body { font-family: sans-serif; margin: 0; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100dvh; transition: background 0.3s, color 0.3s; }
         header { background: var(--primary); color: white; padding: 0.6rem 1rem; display: flex; justify-content: space-between; align-items: center; }
         
-        /* Verstecke Elemente bei Tastatur-Fokus */
+        /* Tastatur-Optimierung: Header & Stats ausblenden */
         body.keyboard-open header, 
         body.keyboard-open #stats-summary { display: none !important; }
 
@@ -88,7 +88,7 @@
     <div id="learn-view">
         <div id="stats-summary" style="font-size: 0.75rem; opacity: 0.7; margin-bottom: 10px; text-align: center;">Fällig: 0 | Gesamt: 0</div>
         <div class="card">
-            <div id="direction-label" style="font-size: 0.9rem; color: var(--primary); margin-bottom: 8px; font-weight: bold;"></div>
+            <div id="direction-label" style="font-size: 0.9rem; color: var(--primary); margin-bottom: 8px; font-weight: bold; display: flex; align-items: center; justify-content: center;"></div>
             <div class="word-prompt" id="display-prompt">Lade Vokabeln...</div>
             <div id="display-badges" class="badge-container"></div>
             <div id="feedback-area" style="margin-top: 15px; font-weight: bold; min-height: 1.5em; line-height: 1.6;"></div>
@@ -265,10 +265,12 @@
             promptEl.innerText = currentItem.termSource;
             promptEl.style.fontSize = currentItem.termSource.length > 25 ? "1.1rem" : currentItem.termSource.length > 15 ? "1.4rem" : "1.8rem";
             document.getElementById('display-badges').innerHTML = (currentItem.tags || "").split(',').map(t => `<span class="badge bg-grammar">${t.trim()}</span>`).join('');
-            document.getElementById('direction-label').innerText = (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
+            
+            // SRS Balken wieder hinzufügen
+            document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
         } else {
             document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Bitte Cloud-Sync nutzen!";
-            document.getElementById('display-badges').innerHTML = ""; document.getElementById('direction-label').innerText = "";
+            document.getElementById('display-badges').innerHTML = ""; document.getElementById('direction-label').innerHTML = "";
         }
     }
 
@@ -346,10 +348,13 @@
         document.getElementById('theme-toggle').innerText = d ? '☀️' : '🌙';
     }
 
+    // Balken-Icon (SVG)
     function getProgressIcon(s = 1) {
         const colors = ['#ff4444', '#ff9800', '#ffeb3b', '#90EE90', '#006400'];
-        const c = colors[Math.min(Math.max(s - 1, 0), 4)] || '#444';
-        return `<span class="badge" style="background-color: ${c}; border-radius: 50%; width: 1.2rem; height: 1.2rem; display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem; color: #fff; margin-right: 4px;">${s}</span>`;
+        const c = Math.min(Math.max(s - 1, 0), 5);
+        let svg = `<svg width="16" height="8" viewBox="0 0 7.5 4" style="margin-right:6px">`;
+        for (let i = 0; i < 5; i++) svg += `<rect x="${i*1.5}" y="${4-(i+1)*0.8}" width="1" height="${(i+1)*0.8}" fill="${i<c ? colors[i] : '#444'}" />`;
+        return svg + `</svg>`;
     }
 
     if(localStorage.getItem('theme') === 'dark') { document.body.classList.add('dark-mode'); document.getElementById('theme-toggle').innerText = '☀️'; }

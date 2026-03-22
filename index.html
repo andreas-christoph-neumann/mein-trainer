@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-    <title>Svenska Trainer Pro</title>
+    <title>Svenska Trainer Pro (Cloud, Level, Diff, Voice & Compact)</title>
     
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 10'><rect width='16' height='10' fill='%230051a8'/><path d='M5 0v10M0 4h16' stroke='%23ffcd00' stroke-width='2'/></svg>">
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 10'><rect width='16' height='10' fill='%230051a8'/><path d='M5 0v10M0 4h16' stroke='%23ffcd00' stroke-width='2'/></svg>">
@@ -36,22 +36,32 @@
         }
 
         body { font-family: sans-serif; margin: 0; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100dvh; transition: background 0.3s, color 0.3s; }
-        header { background: var(--primary); color: white; padding: 0.8rem; display: flex; justify-content: space-between; align-items: center; }
+        
+        /* Kompakter Header */
+        header { background: var(--primary); color: white; padding: 0.5rem 1rem; display: flex; justify-content: space-between; align-items: center; }
         #app { flex: 1; display: flex; flex-direction: column; padding: 1rem; overflow-y: auto; }
         
         .score-display { font-size: 0.85rem; background: rgba(0,0,0,0.2); padding: 5px 12px; border-radius: 20px; display: flex; align-items: center; gap: 10px; }
         .level-badge { background: var(--accent); color: #000; font-weight: bold; padding: 2px 10px; border-radius: 12px; font-size: 0.8rem; min-width: 40px; text-align: center; }
 
-        .card { background: var(--card-bg); padding: 1.5rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 1rem; transition: background 0.3s; }
+        /* Kompakte Karte */
+        .card { background: var(--card-bg); padding: 0.75rem 1rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 1rem; transition: background 0.3s; }
         .word-prompt { font-size: 1.8rem; font-weight: bold; color: var(--text); margin-bottom: 5px; line-height: 1.2; word-break: break-word; }
         
         .badge-container { display: flex; justify-content: center; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
-        .badge { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; color: white; font-weight: bold; text-transform: uppercase; }
+        
+        /* Kompaktere Badges */
+        .badge { padding: 1px 4px; border-radius: 10px; font-size: 0.7rem; color: white; font-weight: bold; text-transform: uppercase; }
         .bg-grammar { background-color: var(--grammar); }
         
+        /* Kompakte Controls */
         .controls { padding: 0.8rem 1rem; background: var(--control-bg); border-top: 1px solid var(--input-border); transition: background 0.3s; }
         
-        input { width: 100%; padding: 12px; font-size: 1rem; border: 2px solid var(--input-border); border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; background: var(--bg); color: var(--text); }
+        /* Kompaktere Spezialtasten */
+        .helper-bar { display: flex; gap: 10px; justify-content: center; margin-bottom: 5px; }
+        .helper-btn { padding: 4px 8px; font-size: 1rem; border: 1px solid var(--input-border); border-radius: 5px; background: var(--bg); color: var(--text); }
+        
+        input { width: 100%; padding: 10px; font-size: 1rem; border: 2px solid var(--input-border); border-radius: 8px; box-sizing: border-box; margin-bottom: 5px; background: var(--bg); color: var(--text); }
         .action-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; }
         .next-btn { background: #4caf50; margin-top: 0; }
         .hidden { display: none; }
@@ -113,6 +123,11 @@
 </div>
 
 <div class="controls" id="input-controls">
+    <div class="helper-bar">
+        <button class="helper-btn" onclick="addChar('å')">å</button>
+        <button class="helper-btn" onclick="addChar('ä')">ä</button>
+        <button class="helper-btn" onclick="addChar('ö')">ö</button>
+    </div>
     <input type="text" id="user-input" placeholder="Deine Antwort..." autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true">
     <button class="action-btn" id="check-btn" onclick="checkAnswer()">Prüfen</button>
     <button class="action-btn next-btn hidden" id="next-btn" onclick="loadNextItem()">Weiter</button>
@@ -218,16 +233,14 @@
         
         if (currentItem.direction === 'de-sv') speak(currentItem.termTarget); else speak(currentItem.termSource);
 
-        const feedback = document.getElementById('feedback-area');
+        const fb = document.getElementById('feedback-area');
         if (isCorrect) {
-            const pointInfo = currentPoints < 5 ? "+1 Punkt" : "+0 Pkt (Max)";
-            feedback.innerHTML = `<span style="color: #4caf50;">Richtig! ${pointInfo}</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
+            fb.innerHTML = `<span style="color: #4caf50;">Richtig! ${currentPoints < 5 ? "+1 Punkt" : "+0 Pkt (Max)"}</span><br><small>Lösung: ${currentItem.termTarget}</small>`;
             document.getElementById('check-btn').disabled = true; setTimeout(loadNextItem, 1500);
         } else {
             let best = variants[0]; let min = 999;
             variants.forEach(v => { let s = getLevenshtein(input, v); if (s < min) { min = s; best = v; } });
-            const lostInfo = currentPoints > 0 ? `-${currentPoints} Punkte` : "0 Punkte";
-            feedback.innerHTML = `<span style="color: #ff4444;">Falsch. (${lostInfo})</span><br>Eingabe: ${getDiffHtml(rawInput.trim(), best)}<br><small>Lösung: ${currentItem.termTarget}</small>`;
+            fb.innerHTML = `<span style="color: #ff4444;">Falsch. (-${currentPoints} Pkt)</span><br>Eingabe: ${getDiffHtml(rawInput.trim(), best)}<br><small>Lösung: ${currentItem.termTarget}</small>`;
             document.getElementById('check-btn').classList.add('hidden'); document.getElementById('next-btn').classList.remove('hidden');
         }
     }
@@ -241,28 +254,6 @@
         return { stage: next, dueDate: Date.now() + ms };
     }
 
-    async function loadNextItem() {
-        await updateScoreDisplay();
-        document.getElementById('check-btn').classList.remove('hidden');
-        document.getElementById('next-btn').classList.add('hidden');
-        document.getElementById('check-btn').disabled = false;
-        document.getElementById('user-input').value = ""; 
-        document.getElementById('feedback-area').innerText = "";
-        
-        const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
-        const allCount = await db.items.count();
-        
-        currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
-        if (currentItem) {
-            document.getElementById('display-prompt').innerText = currentItem.termSource;
-            document.getElementById('display-badges').innerHTML = (currentItem.tags || "").split(',').map(t => `<span class="badge bg-grammar">${t.trim()}</span>`).join('');
-            document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
-        } else {
-            document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Bitte Cloud-Sync nutzen!";
-            document.getElementById('display-badges').innerHTML = ""; document.getElementById('direction-label').innerHTML = "";
-        }
-    }
-
     // --- VERWALTEN LOGIK ---
     async function renderList() {
         const query = document.getElementById('search-input').value.toLowerCase();
@@ -273,6 +264,7 @@
             if (inlineEditingId === i.id) {
                 return `<div class="vocab-item inline-edit-box"><input type="text" id="edit-src-${i.id}" value="${i.termSource}"><input type="text" id="edit-trg-${i.id}" value="${i.termTarget}"><input type="text" id="edit-tags-${i.id}" value="${i.tags || ''}"><div style="display:flex;gap:5px"><button class="action-btn" style="background:#4caf50;padding:5px" onclick="saveInline(${i.id})">OK</button><button class="action-btn" style="background:#666;padding:5px" onclick="inlineEditingId=null;renderList()">X</button></div></div>`;
             }
+            // Kompaktes Icon auch in der Liste
             return `<div class="vocab-item" style="display:flex; justify-content:space-between; align-items:center;"><div><div>${getProgressIcon(i.srs.stage)} <strong>${i.termSource}</strong></div><div style="font-size:0.85rem;opacity:0.8">${i.termTarget}</div></div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:0.75rem">${Math.min((i.srs?.stage || 1)-1, 5)} Pkt.</span><button class="list-btn" onclick="inlineEditingId=${i.id};renderList()">✎</button><button class="list-btn" style="color:#ff4444" onclick="deleteVocab(${i.id})">✕</button></div></div>`;
         }).join('');
     }
@@ -299,12 +291,31 @@
     }
 
     // --- SYSTEM FUNKTIONEN ---
-    function toggleView() { 
-        const isHidden = document.getElementById('add-view').classList.toggle('hidden'); 
-        document.getElementById('learn-view').classList.toggle('hidden'); 
-        document.getElementById('input-controls').classList.toggle('hidden'); 
-        document.getElementById('viewBtn').innerText = isHidden ? "Verwalten" : "Lernen";
-        if(!isHidden) renderList(); else loadNextItem();
+    async function loadNextItem() {
+        await updateScoreDisplay();
+        document.getElementById('check-btn').classList.remove('hidden');
+        document.getElementById('next-btn').classList.add('hidden');
+        document.getElementById('check-btn').disabled = false;
+        document.getElementById('user-input').value = ""; 
+        document.getElementById('feedback-area').innerText = "";
+        
+        const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
+        const allCount = await db.items.count();
+        
+        currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
+        if (currentItem) {
+            // Schriftgröße basierend auf Länge (bestehende Logik)
+            const promptEl = document.getElementById('display-prompt');
+            promptEl.innerText = currentItem.termSource;
+            promptEl.style.fontSize = currentItem.termSource.length > 25 ? "1.1rem" : currentItem.termSource.length > 15 ? "1.4rem" : "1.8rem";
+            
+            // Badges und Richtung aktualisieren (OHNE Stufen-Icon in direction-label)
+            document.getElementById('display-badges').innerHTML = (currentItem.tags || "").split(',').map(t => `<span class="badge bg-grammar">${t.trim()}</span>`).join('');
+            document.getElementById('direction-label').innerText = (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
+        } else {
+            document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Bitte Cloud-Sync nutzen!";
+            document.getElementById('display-badges').innerHTML = ""; document.getElementById('direction-label').innerHTML = "";
+        }
     }
 
     async function syncFromGist() {
@@ -321,11 +332,7 @@
         const t = localStorage.getItem('github_token');
         if (!t) return;
         const all = await db.items.toArray();
-        fetch(`https://api.github.com/gists/${GIST_ID}`, { 
-            method: 'PATCH', 
-            headers: { 'Authorization': `token ${t}`, 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ files: { 'vokabeln.json': { content: JSON.stringify(all, null, 2) } } }) 
-        });
+        fetch(`https://api.github.com/gists/${GIST_ID}`, { method: 'PATCH', headers: { 'Authorization': `token ${t}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ files: { 'vokabeln.json': { content: JSON.stringify(all, null, 2) } } }) });
     }
 
     function exportData() { db.items.toArray().then(items => { const b = new Blob([JSON.stringify(items)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'backup.json'; a.click(); }); }
@@ -341,15 +348,21 @@
         document.getElementById('theme-toggle').innerText = d ? '☀️' : '🌙';
     }
 
+    // Kompaktes SRS-Icon (Zahl in farbigem Kreis)
     function getProgressIcon(s = 1) {
         const colors = ['#ff4444', '#ff9800', '#ffeb3b', '#90EE90', '#006400'];
-        const c = Math.min(Math.max(s - 1, 0), 5);
-        let svg = `<svg width="16" height="8" viewBox="0 0 7.5 4" style="margin-right:6px">`;
-        for (let i = 0; i < 5; i++) svg += `<rect x="${i*1.5}" y="${4-(i+1)*0.8}" width="1" height="${(i+1)*0.8}" fill="${i<c ? colors[i] : '#444'}" />`;
-        return svg + `</svg>`;
+        const c = colors[Math.min(Math.max(s - 1, 0), 4)] || '#444';
+        return `<span class="badge" style="background-color: ${c}; border-radius: 50%; width: 1.2rem; height: 1.2rem; display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem; color: #fff; margin-right: 4px;">${s}</span>`;
     }
 
     function addChar(c) { const i = document.getElementById('user-input'); i.value += c; i.focus(); }
+    function toggleView() { 
+        const isHidden = document.getElementById('add-view').classList.toggle('hidden'); 
+        document.getElementById('learn-view').classList.toggle('hidden'); 
+        document.getElementById('input-controls').classList.toggle('hidden'); 
+        document.getElementById('viewBtn').innerText = isHidden ? "Verwalten" : "Lernen";
+        if(!isHidden) renderList(); else loadNextItem();
+    }
 
     if(localStorage.getItem('theme') === 'dark') { document.body.classList.add('dark-mode'); document.getElementById('theme-toggle').innerText = '☀️'; }
     document.getElementById('github-token').value = localStorage.getItem('github_token') || "";

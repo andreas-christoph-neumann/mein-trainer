@@ -36,9 +36,8 @@
         }
 
         body { font-family: sans-serif; margin: 0; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100dvh; transition: background 0.3s, color 0.3s; }
-        header { background: var(--primary); color: white; padding: 0.6rem 1rem; display: flex; justify-content: space-between; align-items: center; }
+        header { background: var(--primary); color: white; padding: 0.6rem 1rem; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
         
-        /* Tastatur-Optimierung: Header & Stats ausblenden */
         body.keyboard-open header, 
         body.keyboard-open #stats-summary { display: none !important; }
 
@@ -46,6 +45,14 @@
         
         .score-display { font-size: 0.85rem; background: rgba(0,0,0,0.2); padding: 5px 12px; border-radius: 20px; display: flex; align-items: center; gap: 10px; }
         .level-badge { background: var(--accent); color: #000; font-weight: bold; padding: 2px 10px; border-radius: 12px; font-size: 0.8rem; min-width: 40px; text-align: center; }
+
+        /* Filter Button & Modal */
+        #filter-btn { background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 5px; color: white; display: flex; align-items: center; }
+        #filter-btn.active { color: var(--accent); }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-box { background: var(--card-bg); color: var(--text); padding: 1.5rem; border-radius: 15px; width: 85%; max-width: 400px; text-align: left; max-height: 80vh; overflow-y: auto; }
+        .filter-option { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--list-border); cursor: pointer; }
+        .filter-option input { width: auto; margin: 0; }
 
         .card { background: var(--card-bg); padding: 1rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 1rem; transition: background 0.3s; }
         .word-prompt { font-size: 1.8rem; font-weight: bold; color: var(--text); margin-bottom: 5px; line-height: 1.2; word-break: break-word; }
@@ -55,7 +62,6 @@
         .bg-grammar { background-color: var(--grammar); }
         
         .controls { padding: 0.8rem 1rem; background: var(--control-bg); border-top: 1px solid var(--input-border); transition: background 0.3s; }
-        
         input { width: 100%; padding: 12px; font-size: 1rem; border: 2px solid var(--input-border); border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; background: var(--bg); color: var(--text); }
         .action-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; }
         .next-btn { background: #4caf50; margin-top: 0; }
@@ -74,15 +80,28 @@
 <body class="light-mode">
 
 <header id="main-header">
-    <div style="display:flex; align-items:center;">
+    <div style="display:flex; align-items:center; gap: 10px;">
         <button id="theme-toggle" onclick="toggleTheme()" title="Farbschema umschalten" style="background:none; border:none; color:white; font-size:1.4rem; cursor:pointer;">🌙</button>
         <div class="score-display">
             <span id="level-label" class="level-badge">-</span>
             <span id="score-label">0 Pkt.</span>
         </div>
     </div>
-    <button onclick="toggleView()" id="viewBtn" style="background:rgba(255,255,255,0.2); border:1px solid white; color:white; padding:5px 10px; border-radius:5px; cursor:pointer;">Verwalten</button>
+    
+    <div style="display:flex; align-items:center; gap: 8px;">
+        <button id="filter-btn" onclick="openFilterModal()" title="Vokabeln filtern">⏳</button>
+        <button onclick="toggleView()" id="viewBtn" style="background:rgba(255,255,255,0.2); border:1px solid white; color:white; padding:5px 10px; border-radius:5px; cursor:pointer;">Verwalten</button>
+    </div>
 </header>
+
+<div id="filter-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+        <h3 style="margin-top:0">Labels filtern</h3>
+        <p style="font-size:0.8rem; opacity:0.7">Nur Vokabeln mit gewählten Labels anzeigen. Nichts wählen = Alle anzeigen.</p>
+        <div id="filter-options-container"></div>
+        <button class="action-btn" style="margin-top:20px" onclick="closeFilterModal()">Fertig</button>
+    </div>
+</div>
 
 <div id="app">
     <div id="learn-view">
@@ -131,20 +150,58 @@
 
     let currentItem = null;
     let inlineEditingId = null;
+    let activeFilters = []; // Gespeicherte Filter-Labels
 
     // --- KEYBOARD LAYOUT FIX ---
     const inputField = document.getElementById('user-input');
     inputField.addEventListener('focus', () => document.body.classList.add('keyboard-open'));
     inputField.addEventListener('blur', () => document.body.classList.remove('keyboard-open'));
 
-    // --- BEREINIGUNGSFUNKTION (Verbessert für doppelte Leerzeichen & Satzzeichen) ---
+    // --- BEREINIGUNGSFUNKTION ---
     function cleanString(str) {
         if (!str) return "";
         return str
-            .replace(/[\u200B-\u200D\uFEFF]/g, '') // Unsichtbare Zeichen
-            .replace(/\s+/g, ' ')                  // Doppelte Leerzeichen -> eines
-            .replace(/\s+([?.!,])/g, '$1')         // Leerzeichen vor Satzzeichen entfernen
+            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+            .replace(/\s+/g, ' ')
+            .replace(/\s+([?.!,])/g, '$1')
             .trim();
+    }
+
+    // --- FILTER LOGIK ---
+    async function openFilterModal() {
+        const allItems = await db.items.toArray();
+        const tagSet = new Set();
+        allItems.forEach(item => {
+            if(item.tags) {
+                item.tags.split(',').forEach(tag => tagSet.add(tag.trim()));
+            }
+        });
+        
+        const sortedTags = Array.from(tagSet).sort();
+        const container = document.getElementById('filter-options-container');
+        container.innerHTML = sortedTags.map(tag => `
+            <label class="filter-option">
+                <input type="checkbox" value="${tag}" ${activeFilters.includes(tag) ? 'checked' : ''} onchange="toggleFilterTag('${tag}')">
+                <span>${tag}</span>
+            </label>
+        `).join('');
+        
+        document.getElementById('filter-modal').classList.remove('hidden');
+    }
+
+    function toggleFilterTag(tag) {
+        if (activeFilters.includes(tag)) {
+            activeFilters = activeFilters.filter(t => t !== tag);
+        } else {
+            activeFilters.push(tag);
+        }
+        const btn = document.getElementById('filter-btn');
+        if (activeFilters.length > 0) btn.classList.add('active'); else btn.classList.remove('active');
+    }
+
+    function closeFilterModal() {
+        document.getElementById('filter-modal').classList.add('hidden');
+        loadNextItem(); // Lade neues Wort basierend auf Filter
     }
 
     // --- PUNKTE & LEVEL LOGIK ---
@@ -173,8 +230,20 @@
         const score = allItems.reduce((sum, i) => sum + Math.min((i.srs?.stage || 1) - 1, 5), 0);
         document.getElementById('score-label').innerText = `${score.toLocaleString()} Pkt.`;
         document.getElementById('level-label').innerText = getLevel(score);
-        const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
-        document.getElementById('stats-summary').innerText = `Fällig: ${due.length} | Gesamt: ${allItems.length}`;
+        
+        // Stats basierend auf Filtern berechnen
+        let targetItems = allItems;
+        if (activeFilters.length > 0) {
+            targetItems = allItems.filter(item => {
+                if (!item.tags) return false;
+                const itemTags = item.tags.split(',').map(t => t.trim());
+                return activeFilters.some(filter => itemTags.includes(filter));
+            });
+        }
+        
+        const now = Date.now();
+        const dueCount = targetItems.filter(i => (i.srs?.dueDate || 0) < now).length;
+        document.getElementById('stats-summary').innerText = `Fällig: ${dueCount} | Gesamt (gefiltert): ${targetItems.length}`;
     }
 
     // --- SPRACHAUSGABE ---
@@ -224,9 +293,7 @@
         const variants = [];
         
         targets.forEach(t => {
-            // Variante 1: Nur Klammern entfernen, Text behalten
             variants.push(cleanString(t.replace(/[()]/g, '')).toLowerCase());
-            // Variante 2: Klammern UND deren Inhalt entfernen
             let clean = cleanString(t.replace(/\([^)]*\)/g, '')).toLowerCase();
             if (clean && !variants.includes(clean)) variants.push(clean);
         });
@@ -269,8 +336,19 @@
         document.getElementById('user-input').value = ""; 
         document.getElementById('feedback-area').innerText = "";
         
-        const due = await db.items.where('srs.dueDate').below(Date.now()).toArray();
-        const allCount = await db.items.count();
+        let allItems = await db.items.toArray();
+        const now = Date.now();
+
+        // Filter anwenden
+        if (activeFilters.length > 0) {
+            allItems = allItems.filter(item => {
+                if (!item.tags) return false;
+                const itemTags = item.tags.split(',').map(t => t.trim());
+                return activeFilters.some(filter => itemTags.includes(filter));
+            });
+        }
+
+        const due = allItems.filter(i => (i.srs?.dueDate || 0) < now);
         
         currentItem = due.length > 0 ? due[Math.floor(Math.random() * due.length)] : null;
         if (currentItem) {
@@ -278,11 +356,10 @@
             promptEl.innerText = currentItem.termSource;
             promptEl.style.fontSize = currentItem.termSource.length > 25 ? "1.1rem" : currentItem.termSource.length > 15 ? "1.4rem" : "1.8rem";
             document.getElementById('display-badges').innerHTML = (currentItem.tags || "").split(',').map(t => `<span class="badge bg-grammar">${t.trim()}</span>`).join('');
-            
-            // SRS Balken
             document.getElementById('direction-label').innerHTML = getProgressIcon(currentItem.srs.stage) + (currentItem.direction === 'de-sv' ? " DE ➔ SV" : " SV ➔ DE");
         } else {
-            document.getElementById('display-prompt').innerText = allCount > 0 ? "Pause! 🎉" : "Bitte Cloud-Sync nutzen!";
+            const hasData = (await db.items.count()) > 0;
+            document.getElementById('display-prompt').innerText = hasData ? (activeFilters.length > 0 ? "Keine Vokabeln für diesen Filter fällig!" : "Pause! 🎉") : "Bitte Cloud-Sync nutzen!";
             document.getElementById('display-badges').innerHTML = ""; document.getElementById('direction-label').innerHTML = "";
         }
     }
@@ -361,7 +438,6 @@
         document.getElementById('theme-toggle').innerText = d ? '☀️' : '🌙';
     }
 
-    // Balken-Icon (SVG)
     function getProgressIcon(s = 1) {
         const colors = ['#ff4444', '#ff9800', '#ffeb3b', '#90EE90', '#006400'];
         const c = Math.min(Math.max(s - 1, 0), 5);

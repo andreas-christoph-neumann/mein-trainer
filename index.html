@@ -99,7 +99,9 @@
 </div>
 
 <script>
-    const GIST_ID = '89c2d3c10a13278890ef930003865fe7';
+    // ACHTUNG: Ersetze diese ID durch deine eigene Gist-ID von GitHub!
+    const GIST_ID = 'HIER_DEINE_GIST_ID_EINSETZEN'; 
+
     const db = new Dexie('VocabTrainerDB');
     db.version(1).stores({ items: '++id, termSource, termTarget, direction, tags, srs.dueDate' });
 
@@ -188,20 +190,38 @@
     async function addVocab() { const sv=document.getElementById('input-sv').value.trim(), de=document.getElementById('input-de').value.trim(), tags=document.getElementById('input-tags').value.trim(); if(!sv||!de) return; await db.items.bulkAdd([{termSource:de,termTarget:sv,direction:'de-sv',tags,srs:{stage:1,dueDate:0}},{termSource:sv,termTarget:de,direction:'sv-de',tags,srs:{stage:1,dueDate:0}}]); document.getElementById('input-sv').value=""; document.getElementById('input-de').value=""; pushToGist(); renderList(); loadNextItem(); }
 
     async function syncFromGist() {
-        const t = document.getElementById('github-token').value; if(t) localStorage.setItem('github_token', t); if(!t) { alert("Token benötigt!"); return; }
+        const t = document.getElementById('github-token').value || localStorage.getItem('github_token'); 
+        if(t) localStorage.setItem('github_token', t.trim());
+        if(!t) { alert("Token benötigt!"); return; }
+        
         setSyncStatus('syncing');
         try { 
-            const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, { headers: { 'Authorization': `token ${t}` } });
+            const res = await fetch(`https://api.github.com/gists/${GIST_ID.trim()}`, { headers: { 'Authorization': `token ${t.trim()}` } });
+            
+            if (!res.ok) {
+                if (res.status === 401 || res.status === 403) throw new Error("Token ungültig oder keine Gist-Berechtigung.");
+                if (res.status === 404) throw new Error("Gist-ID nicht gefunden.");
+                throw new Error(`Fehler ${res.status}`);
+            }
+
             const gistData = await res.json();
+            if (!gistData.files['vokabeln.json']) throw new Error("Datei 'vokabeln.json' im Gist nicht gefunden.");
+            
             const data = JSON.parse(gistData.files['vokabeln.json'].content);
-            if (data && Array.isArray(data)) { await db.items.clear(); await db.items.bulkAdd(data); setSyncStatus('success'); alert("Import erfolgreich!"); location.reload(); } 
-        } catch (e) { setSyncStatus('error'); alert("Import fehlgeschlagen!"); loadNextItem(); }
+            if (data && Array.isArray(data)) { 
+                await db.items.clear(); await db.items.bulkAdd(data); 
+                setSyncStatus('success'); alert("Import erfolgreich!"); location.reload(); 
+            } 
+        } catch (e) { 
+            setSyncStatus('error'); alert("Fehler: " + e.message); 
+            loadNextItem(); 
+        }
     }
 
     async function pushToGist() {
         const t = localStorage.getItem('github_token'); if (!t) {checkTokenState();return;} setSyncStatus('syncing');
         const all = await db.items.toArray();
-        try { const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, { method: 'PATCH', headers: { 'Authorization': `token ${t}`,'Content-Type':'application/json' }, body: JSON.stringify({ files: { 'vokabeln.json': { content: JSON.stringify(all, null, 2) } } }) }); if (res.ok) setSyncStatus('success'); else setSyncStatus('error'); }
+        try { const res = await fetch(`https://api.github.com/gists/${GIST_ID.trim()}`, { method: 'PATCH', headers: { 'Authorization': `token ${t.trim()}`,'Content-Type':'application/json' }, body: JSON.stringify({ files: { 'vokabeln.json': { content: JSON.stringify(all, null, 2) } } }) }); if (res.ok) setSyncStatus('success'); else setSyncStatus('error'); }
         catch (e) { setSyncStatus('error'); }
     }
 

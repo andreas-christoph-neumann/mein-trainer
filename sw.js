@@ -1,13 +1,19 @@
-const VERSION = 'v1.2'; [cite_start]// Diese Nummer bei jedem Update ändern! [cite: 169]
+
+const VERSION = 'v2.0';
 const CACHE_NAME = `vocab-${VERSION}`;
-const ASSETS = ['./', './index.html', './manifest.json'];
+const ASSETS = [
+  './',
+  './index.html',
+  './manifest.json',
+  'https://unpkg.com/dexie/dist/dexie.js'  // Dexie wird jetzt auch offline gecached
+];
 
 // Installation: Cache befüllen
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
   );
-  self.skipWaiting(); // Erzwingt die sofortige Aktivierung
+  self.skipWaiting();
 });
 
 // Aktivierung: Alten Cache löschen
@@ -20,11 +26,27 @@ self.addEventListener('activate', (e) => {
       );
     })
   );
+  self.clients.claim(); // Sofort alle Tabs übernehmen
 });
 
-// Fetch: Daten laden
+// Fetch: Network-first Strategie
+// Versucht zuerst das Netzwerk. Nur wenn offline, wird der Cache genutzt.
+// So bekommst du Updates sofort, hast aber trotzdem Offline-Support.
 self.addEventListener('fetch', (e) => {
+  // API-Calls (GitHub etc.) nie cachen
+  if (e.request.url.includes('api.github.com')) return;
+
   e.respondWith(
-    caches.match(e.request).then(res => res || fetch(e.request))
+    fetch(e.request)
+      .then(response => {
+        // Erfolgreiche Antwort in den Cache legen
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(e.request, copy));
+        return response;
+      })
+      .catch(() => {
+        // Offline: Aus dem Cache holen
+        return caches.match(e.request);
+      })
   );
 });

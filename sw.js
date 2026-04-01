@@ -1,5 +1,4 @@
-
-const VERSION = 'v2.0';
+const VERSION = 'v2.1';
 const CACHE_NAME = `vocab-${VERSION}`;
 const ASSETS = [
   './',
@@ -33,8 +32,8 @@ self.addEventListener('activate', (e) => {
 // Versucht zuerst das Netzwerk. Nur wenn offline, wird der Cache genutzt.
 // So bekommst du Updates sofort, hast aber trotzdem Offline-Support.
 self.addEventListener('fetch', (e) => {
-  // API-Calls (GitHub etc.) nie cachen
-  if (e.request.url.includes('api.github.com')) return;
+  // GitHub-Calls (API + Raw-Dateien) nie cachen
+  if (e.request.url.includes('github.com') || e.request.url.includes('githubusercontent.com')) return;
 
   e.respondWith(
     fetch(e.request)

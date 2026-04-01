@@ -238,8 +238,9 @@
             let content;
             if (file.truncated) {
                 // Datei ist zu groß für die Gist-API → vollständige Datei separat laden
-                const rawRes = await fetch(file.raw_url, { headers: { 'Authorization': `token ${t.trim()}` } });
-                if (!rawRes.ok) throw new Error("Vollständige Datei konnte nicht geladen werden.");
+                // raw_url enthält bereits einen Zugangstoken, kein Auth-Header nötig
+                const rawRes = await fetch(file.raw_url);
+                if (!rawRes.ok) throw new Error("Vollständige Datei konnte nicht geladen werden (Status " + rawRes.status + ").");
                 content = await rawRes.text();
             } else {
                 content = file.content;

@@ -105,6 +105,8 @@
     db.version(1).stores({ items: '++id, termSource, termTarget, direction, tags, srs.dueDate' });
 
     let currentItem = null, inlineEditingId = null, activeFilters = [];
+    let syncTimer = null;
+    let pendingSyncData = null; // Zwischenspeicher für ungesyncte Daten
 
     const inputField = document.getElementById('user-input');
     inputField.addEventListener('focus', () => document.body.classList.add('keyboard-open'));
@@ -256,11 +258,17 @@
         }
     }
 
+    // === GEÄNDERT: Sync mit Debounce (30 Sek.) statt bei jeder Aktion ===
     async function pushToGist() {
-        const t = localStorage.getItem('github_token'); if (!t) {checkTokenState();return;} setSyncStatus('syncing');
-        const all = await db.items.toArray();
-        try { const res = await fetch(`https://api.github.com/gists/${GIST_ID.trim()}`, { method: 'PATCH', headers: { 'Authorization': `token ${t.trim()}`,'Content-Type':'application/json' }, body: JSON.stringify({ files: { 'vokabeln.json': { content: JSON.stringify(all, null, 2) } } }) }); if (res.ok) setSyncStatus('success'); else setSyncStatus('error'); }
-        catch (e) { setSyncStatus('error'); }
+        const t = localStorage.getItem('github_token'); if (!t) {checkTokenState();return;}
+        if (syncTimer) clearTimeout(syncTimer);
+        setSyncStatus('syncing');
+        // Daten sofort zwischenspeichern für den Fall, dass der Browser geschlossen wird
+        pendingSyncData = JSON.stringify(await db.items.toArray(), null, 2);
+        syncTimer = setTimeout(async () => {
+            try { const res = await fetch(`https://api.github.com/gists/${GIST_ID.trim()}`, { method: 'PATCH', headers: { 'Authorization': `token ${t.trim()}`,'Content-Type':'application/json' }, body: JSON.stringify({ files: { 'vokabeln.json': { content: pendingSyncData } } }) }); if (res.ok) { setSyncStatus('success'); pendingSyncData = null; } else setSyncStatus('error'); }
+            catch (e) { setSyncStatus('error'); }
+        }, 30000);
     }
 
     function exportData(){ db.items.toArray().then(i=>{ const b=new Blob([JSON.stringify(i)],{type:'application/json'}), a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='backup.json'; a.click(); }); }
@@ -270,6 +278,20 @@
 
     if(localStorage.getItem('theme')==='dark') { document.body.classList.add('dark-mode'); document.getElementById('theme-toggle').innerText='☀️'; }
     document.getElementById('github-token').value=localStorage.getItem('github_token')||""; checkTokenState();
+
+    // Beim Schließen: Falls ein Sync aussteht, sofort absenden
+    window.addEventListener('beforeunload', () => {
+        if (pendingSyncData) {
+            const t = localStorage.getItem('github_token');
+            if (t) {
+                fetch(`https://api.github.com/gists/${GIST_ID.trim()}`, {
+                    method: 'PATCH', keepalive: true,
+                    headers: { 'Authorization': `token ${t.trim()}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ files: { 'vokabeln.json': { content: pendingSyncData } } })
+                }).catch(() => {});
+            }
+        }
+    });
     db.items.count().then(c=>{ if(c===0 && localStorage.getItem('github_token')) syncFromGist(); else loadNextItem(); });
 </script>
 </body>

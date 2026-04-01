@@ -262,10 +262,10 @@
     async function pushToGist() {
         const t = localStorage.getItem('github_token'); if (!t) {checkTokenState();return;}
         if (syncTimer) clearTimeout(syncTimer);
-        setSyncStatus('syncing');
         // Daten sofort zwischenspeichern für den Fall, dass der Browser geschlossen wird
         pendingSyncData = JSON.stringify(await db.items.toArray(), null, 2);
         syncTimer = setTimeout(async () => {
+            setSyncStatus('syncing');
             try { const res = await fetch(`https://api.github.com/gists/${GIST_ID.trim()}`, { method: 'PATCH', headers: { 'Authorization': `token ${t.trim()}`,'Content-Type':'application/json' }, body: JSON.stringify({ files: { 'vokabeln.json': { content: pendingSyncData } } }) }); if (res.ok) { setSyncStatus('success'); pendingSyncData = null; } else setSyncStatus('error'); }
             catch (e) { setSyncStatus('error'); }
         }, 30000);

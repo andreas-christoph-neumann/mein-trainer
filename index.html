@@ -38,7 +38,9 @@
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }
         .modal-box { background: var(--card-bg); color: var(--text); padding: 1.5rem; border-radius: 15px; width: 85%; max-width: 400px; max-height: 80vh; overflow-y: auto; }
-        .filter-option { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--list-border); cursor: pointer; }
+        .filter-option { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--list-border); cursor: pointer; text-align: left; }
+        .filter-option input[type="checkbox"] { flex-shrink: 0; width: 18px; height: 18px; margin: 0; }
+        .filter-option span { flex: 1; font-size: 0.95rem; }
         .card { background: var(--card-bg); padding: 1rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 1rem; }
         .word-prompt { font-size: 1.8rem; font-weight: bold; margin-bottom: 5px; line-height: 1.2; word-break: break-word; }
         .badge-container { display: flex; justify-content: center; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
@@ -216,7 +218,7 @@
     }
     async function saveInline(id){ await db.items.update(id,{termSource:document.getElementById(`edit-src-${id}`).value,termTarget:document.getElementById(`edit-trg-${id}`).value,tags:document.getElementById(`edit-tags-${id}`).value}); inlineEditingId=null; pushToGist(); renderList(); updateScoreDisplay(); }
     async function deleteVocab(id){ if(confirm("Löschen?")){ await db.items.delete(id); pushToGist(); renderList(); updateScoreDisplay(); } }
-    async function addVocab() { const sv=document.getElementById('input-sv').value.trim(), de=document.getElementById('input-de').value.trim(), tags=document.getElementById('input-tags').value.trim(); if(!sv||!de) return; await db.items.bulkAdd([{termSource:de,termTarget:sv,direction:'de-sv',tags,srs:{stage:1,dueDate:0}},{termSource:sv,termTarget:de,direction:'sv-de',tags,srs:{stage:1,dueDate:0}}]); document.getElementById('input-sv').value=""; document.getElementById('input-de').value=""; pushToGist(); renderList(); loadNextItem(); }
+    async function addVocab() { const sv=document.getElementById('input-sv').value.trim(), de=document.getElementById('input-de').value.trim(), tags=document.getElementById('input-tags').value.trim(); if(!sv||!de) return; await db.items.bulkAdd([{termSource:de,termTarget:sv,direction:'de-sv',tags,srs:{stage:1,dueDate:0}},{termSource:sv,termTarget:de,direction:'sv-de',tags,srs:{stage:1,dueDate:0}}]); document.getElementById('input-sv').value=""; document.getElementById('input-de').value=""; document.getElementById('input-tags').value=""; pushToGist(); renderList(); loadNextItem(); }
 
     async function syncFromGist() {
         const t = document.getElementById('github-token').value || localStorage.getItem('github_token'); 
